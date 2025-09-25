@@ -63,6 +63,25 @@ if(NOT (TARGET Vulkan::SPIRV-Tools))
   message(FATAL_ERROR "SPIRV-Tools not found.")
 endif()
 
+# spdlog #######################################################################
+
+FetchContent_Declare(
+  spdlog
+  GIT_REPOSITORY https://github.com/gabime/spdlog.git
+  GIT_TAG v1.15.3
+  GIT_SHALLOW YES)
+
+FetchContent_MakeAvailable(spdlog)
+
+string(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_UPPER)
+if(CMAKE_BUILD_TYPE_UPPER MATCHES "RELEASE")
+  set(ENABLE_LOGGING_DEFAULT ON)
+else()
+  set(ENABLE_LOGGING_DEFAULT OFF)
+endif()
+
+option(ENABLE_LOGGING "Enable application logging" ${ENABLE_LOGGING_DEFAULT})
+
 # ##############################################################################
 
 add_subdirectory(VoxelDynamics)

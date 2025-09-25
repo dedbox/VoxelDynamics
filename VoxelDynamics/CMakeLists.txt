@@ -9,7 +9,11 @@ set(BUILD_SHARED_LIBS OFF)
 
 add_library(VoxelDynamics STATIC src/VoxelDynamics/Hello.cpp)
 
-target_link_libraries(VoxelDynamics PRIVATE glfw)
+if(ENABLE_LOGGING)
+  target_compile_definitions(VoxelDynamics PRIVATE ENABLE_LOGGING)
+endif()
+
+target_link_libraries(VoxelDynamics PRIVATE glfw spdlog::spdlog)
 
 target_precompile_headers(
   VoxelDynamics

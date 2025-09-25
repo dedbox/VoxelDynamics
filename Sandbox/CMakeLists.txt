@@ -9,6 +9,10 @@ set(BUILD_SHARED_LIBS OFF)
 
 add_executable(Sandbox src/Sandbox.cpp)
 
+if(ENABLE_LOGGING)
+  target_compile_definitions(Sandbox PRIVATE ENABLE_LOGGING)
+endif()
+
 target_link_libraries(
   Sandbox
   PRIVATE VoxelDynamics
