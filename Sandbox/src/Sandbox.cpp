@@ -1,4 +1,6 @@
 #include "GLFW/glfw3.h"
+#include "taskflow/algorithm/for_each.hpp"
+#include "taskflow/taskflow.hpp"
 
 #include <VoxelDynamics/Hello.hpp>
 
@@ -60,20 +62,39 @@ GLFWwindow* initWindow(const std::string& windowTitle, uint32_t& outWidth, uint3
 
 } // namespace
 
+// int main()
+// {
+//     uint32_t width  = 1280;
+//     uint32_t height = 800;
+
+//     GLFWwindow* window = initWindow("GLFW Example", width, height);
+
+//     VoxelDynamics::Hello();
+
+//     while (!glfwWindowShouldClose(window))
+//     {
+//         glfwPollEvents();
+//     }
+
+//     glfwTerminate();
+//     return 0;
+// }
+
 int main()
 {
-    uint32_t width  = 1280;
-    uint32_t height = 800;
+    tf::Taskflow taskflow;
 
-    GLFWwindow* window = initWindow("GLFW Example", width, height);
+    auto task =
+        taskflow.for_each_index(1, 9, 1, [](int i) { std::print("{}", i); }).name("for_each_index");
 
-    VoxelDynamics::Hello();
+    taskflow.emplace([]() { std::println("\nS - Start"); }).name("S").precede(task);
+    taskflow.emplace([]() { std::println("\nT - End"); }).name("T").succeed(task);
 
-    while (!glfwWindowShouldClose(window))
-    {
-        glfwPollEvents();
-    }
+    std::ofstream os("taskflow.dot");
+    taskflow.dump(os);
 
-    glfwTerminate();
+    tf::Executor executor;
+    executor.run(taskflow).wait();
+
     return 0;
 }
