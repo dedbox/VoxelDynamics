@@ -9,7 +9,14 @@ set(BUILD_SHARED_LIBS OFF)
 
 add_executable(Sandbox src/Sandbox.cpp)
 
-target_link_libraries(Sandbox PRIVATE VoxelDynamics glfw Threads::Threads
-                                      Taskflow::Taskflow)
+target_link_libraries(
+  Sandbox
+  PRIVATE VoxelDynamics
+          glfw
+          Threads::Threads
+          Taskflow::Taskflow
+          Vulkan::Vulkan
+          Vulkan::glslang
+          Vulkan::SPIRV-Tools)
 
 install(TARGETS Sandbox DESTINATION bin)

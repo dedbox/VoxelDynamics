@@ -3,6 +3,8 @@ project(VoxelDynamics)
 
 set(CMAKE_CXX_STANDARD 23)
 
+set(BUILD_SHARED_LIBS OFF)
+
 include(FetchContent)
 
 # GLFW #########################################################################
@@ -44,6 +46,22 @@ FetchContent_MakeAvailable(taskflow)
 
 set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 find_package(Threads REQUIRED)
+
+# Vulkan #######################################################################
+
+find_package(Vulkan REQUIRED COMPONENTS glslang SPIRV-Tools)
+
+if(NOT Vulkan_FOUND)
+  message(FATAL_ERROR "Vulkan not found.")
+endif()
+
+if(NOT (TARGET Vulkan::glslang))
+  message(FATAL_ERROR "glslang not found.")
+endif()
+
+if(NOT (TARGET Vulkan::SPIRV-Tools))
+  message(FATAL_ERROR "SPIRV-Tools not found.")
+endif()
 
 # ##############################################################################
 
