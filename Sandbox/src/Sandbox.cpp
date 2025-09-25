@@ -1,8 +1,9 @@
 #include "GLFW/glfw3.h"
-#include "taskflow/algorithm/for_each.hpp"
-#include "taskflow/taskflow.hpp"
 
-#include <VoxelDynamics/Hello.hpp>
+// #include "taskflow/algorithm/for_each.hpp"
+// #include "taskflow/taskflow.hpp"
+
+#include "vulkan/vulkan.hpp"
 
 namespace
 {
@@ -62,6 +63,8 @@ GLFWwindow* initWindow(const std::string& windowTitle, uint32_t& outWidth, uint3
 
 } // namespace
 
+// GLFW ////////////////////////////////////////////////////////////////////////////////////////////
+
 // int main()
 // {
 //     uint32_t width  = 1280;
@@ -80,21 +83,66 @@ GLFWwindow* initWindow(const std::string& windowTitle, uint32_t& outWidth, uint3
 //     return 0;
 // }
 
+// Taskflow ////////////////////////////////////////////////////////////////////////////////////////
+
+// int main()
+// {
+//     tf::Taskflow taskflow;
+
+//     auto task =
+//         taskflow.for_each_index(1, 9, 1, [](int i) { std::print("{}", i);
+//         }).name("for_each_index");
+
+//     taskflow.emplace([]() { std::println("\nS - Start"); }).name("S").precede(task);
+//     taskflow.emplace([]() { std::println("\nT - End"); }).name("T").succeed(task);
+
+//     std::ofstream os("taskflow.dot");
+//     taskflow.dump(os);
+
+//     tf::Executor executor;
+//     executor.run(taskflow).wait();
+
+//     return 0;
+// }
+
+// glslang /////////////////////////////////////////////////////////////////////////////////////////
+
+// namespace
+// {
+
+// std::vector<uint8_t> compileShader(
+//     EShLanguage stage, const char* code, const TBuiltInResource* resources)
+// {
+//     std::unique_ptr<glslang::TShader> shader = std::make_unique<glslang::TShader>(stage);
+
+//     shader->setStrings(&code, 1);
+//     shader->setEnvInput(glslang::EShSourceGlsl, stage, glslang::EShClientVulkan, 100);
+//     shader->setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_3);
+//     shader->setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_6);
+
+//     auto includer = glslang::TShader::ForbidIncluder();
+
+//     std::string output;
+//     if (!shader->preprocess(
+//             resources, 100, ENoProfile, false, false, EShMsgDefault, &output, includer))
+//     {
+//         // ...
+//     }
+// }
+
+// } // namespace
+
 int main()
 {
-    tf::Taskflow taskflow;
+    VoxelDynamics::Log::Init("Sandbox");
 
-    auto task =
-        taskflow.for_each_index(1, 9, 1, [](int i) { std::print("{}", i); }).name("for_each_index");
+    VoxelDynamics::Log::Trace("Hello {}", "world");
+    VoxelDynamics::Log::Warn("Goodbye {}", "moon");
 
-    taskflow.emplace([]() { std::println("\nS - Start"); }).name("S").precede(task);
-    taskflow.emplace([]() { std::println("\nT - End"); }).name("T").succeed(task);
+    VoxelDynamics::Core::Assert(1 + 1 == 2, "{} + {} = {}", 1, 1, 2);
+    VoxelDynamics::Assert(2 + 2 == 4, "{} + {} = {}", 2, 2, 4);
 
-    std::ofstream os("taskflow.dot");
-    taskflow.dump(os);
+    VoxelDynamics::Core::Assert(1 + 1 == 3, "{} + {} != {}", 1, 1, 3);
 
-    tf::Executor executor;
-    executor.run(taskflow).wait();
-
-    return 0;
+    std::println("done");
 }

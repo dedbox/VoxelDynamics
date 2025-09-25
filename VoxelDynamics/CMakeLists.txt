@@ -7,7 +7,7 @@ set(BUILD_SHARED_LIBS OFF)
 
 # ##############################################################################
 
-add_library(VoxelDynamics STATIC src/VoxelDynamics/Hello.cpp)
+add_library(VoxelDynamics STATIC src/VoxelDynamics/Core/Log.cpp)
 
 if(ENABLE_LOGGING)
   target_compile_definitions(VoxelDynamics PRIVATE ENABLE_LOGGING)
@@ -43,7 +43,8 @@ target_precompile_headers(
   <unordered_map>
   <unordered_set>
   <variant>
-  <vector>)
+  <vector>
+  src/VoxelDynamics/Core/Log.hpp)
 
 target_include_directories(VoxelDynamics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
