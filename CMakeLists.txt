@@ -25,6 +25,26 @@ set(GLFW_BUILD_EXAMPLES
 
 FetchContent_MakeAvailable(glfw)
 
+# Taskflow #####################################################################
+
+FetchContent_Declare(
+  taskflow
+  GIT_REPOSITORY https://github.com/taskflow/taskflow.git
+  # GIT_TAG v3.10.0
+  GIT_SHALLOW ON)
+
+set(TF_BUILD_TESTS
+    OFF
+    CACHE BOOL "" FORCE)
+set(TF_BUILD_EXAMPLES
+    OFF
+    CACHE BOOL "" FORCE)
+
+FetchContent_MakeAvailable(taskflow)
+
+set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+find_package(Threads REQUIRED)
+
 # ##############################################################################
 
 add_subdirectory(VoxelDynamics)
