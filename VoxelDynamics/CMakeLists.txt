@@ -5,13 +5,11 @@ set(CMAKE_CXX_STANDARD 23)
 
 set(BUILD_SHARED_LIBS OFF)
 
-include(FetchContent)
-
 # ##############################################################################
 
 add_library(VoxelDynamics STATIC src/VoxelDynamics/Hello.cpp)
 
-# target_link_libraries(VoxelDynamics PRIVATE ...)
+target_link_libraries(VoxelDynamics PRIVATE glfw)
 
 target_precompile_headers(
   VoxelDynamics

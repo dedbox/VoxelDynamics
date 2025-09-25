@@ -7,6 +7,6 @@ set(BUILD_SHARED_LIBS OFF)
 
 add_executable(Sandbox src/Sandbox.cpp)
 
-target_link_libraries(Sandbox PRIVATE VoxelDynamics)
+target_link_libraries(Sandbox PRIVATE VoxelDynamics glfw)
 
 install(TARGETS Sandbox DESTINATION bin)
