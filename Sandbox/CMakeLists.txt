@@ -21,6 +21,15 @@ target_link_libraries(
           Taskflow::Taskflow
           Vulkan::Vulkan
           Vulkan::glslang
-          Vulkan::SPIRV-Tools)
+          glslang-default-resource-limits)
+
+add_custom_target(
+  copy_assets
+  COMMAND
+    ${CMAKE_COMMAND} -E copy_directory_if_different
+    "${CMAKE_CURRENT_SOURCE_DIR}/assets/" "$<TARGET_FILE_DIR:Sandbox>/assets"
+  COMMENT "Copying assets if different...")
+
+add_dependencies(Sandbox copy_assets)
 
 install(TARGETS Sandbox DESTINATION bin)
