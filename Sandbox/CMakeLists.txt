@@ -7,21 +7,19 @@ set(CMAKE_CXX_EXTENSIONS ON)
 
 set(BUILD_SHARED_LIBS OFF)
 
+# ##############################################################################
+
 add_executable(Sandbox src/Sandbox.cpp)
 
-if(ENABLE_LOGGING)
+string(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_UPPER)
+if(CMAKE_BUILD_TYPE_UPPER MATCHES "RELEASE")
+  message("Logging is disabled")
+else()
+  option(ENABLE_LOGGING "Enable application logging" ON)
   target_compile_definitions(Sandbox PRIVATE ENABLE_LOGGING)
 endif()
 
-target_link_libraries(
-  Sandbox
-  PRIVATE VoxelDynamics
-          glfw
-          Threads::Threads
-          Taskflow::Taskflow
-          Vulkan::Vulkan
-          Vulkan::glslang
-          glslang-default-resource-limits)
+target_link_libraries(Sandbox PRIVATE VoxelDynamics)
 
 add_custom_target(
   copy_assets

@@ -73,15 +73,6 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(spdlog)
 
-string(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_UPPER)
-if(CMAKE_BUILD_TYPE_UPPER MATCHES "RELEASE")
-  set(ENABLE_LOGGING_DEFAULT ON)
-else()
-  set(ENABLE_LOGGING_DEFAULT OFF)
-endif()
-
-option(ENABLE_LOGGING "Enable application logging" ${ENABLE_LOGGING_DEFAULT})
-
 # ##############################################################################
 
 add_subdirectory(VoxelDynamics)

@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.31)
 project(VoxelDynamics)
 
 set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS ON)
 
 set(BUILD_SHARED_LIBS OFF)
 
@@ -9,11 +11,23 @@ set(BUILD_SHARED_LIBS OFF)
 
 add_library(VoxelDynamics STATIC src/VoxelDynamics/Core/Log.cpp)
 
-if(ENABLE_LOGGING)
+string(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_UPPER)
+if(CMAKE_BUILD_TYPE_UPPER MATCHES "RELEASE")
+  message("Logging is disabled")
+else()
+  option(ENABLE_LOGGING "Enable application logging" ON)
   target_compile_definitions(VoxelDynamics PRIVATE ENABLE_LOGGING)
 endif()
 
-target_link_libraries(VoxelDynamics PRIVATE glfw spdlog::spdlog)
+target_link_libraries(
+  VoxelDynamics
+  PRIVATE glfw
+          Threads::Threads
+          Taskflow::Taskflow
+          Vulkan::Vulkan
+          Vulkan::glslang
+          glslang-default-resource-limits
+          spdlog::spdlog)
 
 target_precompile_headers(
   VoxelDynamics
@@ -26,6 +40,7 @@ target_precompile_headers(
   <format>
   <fstream>
   <functional>
+  <ios>
   <iterator>
   <list>
   <map>
@@ -33,9 +48,11 @@ target_precompile_headers(
   <optional>
   <print>
   <ranges>
+  <set>
   <span>
   <stdexcept>
   <string>
+  <string_view>
   <tuple>
   <type_traits>
   <typeindex>
