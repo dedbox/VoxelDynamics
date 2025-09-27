@@ -9,11 +9,12 @@ set(BUILD_SHARED_LIBS OFF)
 
 # ##############################################################################
 
-add_library(VoxelDynamics STATIC src/VoxelDynamics/Core/Log.cpp)
+add_library(VoxelDynamics STATIC src/VoxelDynamics/Core/Log.cpp
+                                 src/VoxelDynamics/Shader/ShaderCompiler.cpp)
 
 string(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_UPPER)
 if(CMAKE_BUILD_TYPE_UPPER MATCHES "RELEASE")
-  message("Logging is disabled")
+  message("Logging is disabled for ${PROJECT_NAME}")
 else()
   option(ENABLE_LOGGING "Enable application logging" ON)
   target_compile_definitions(VoxelDynamics PRIVATE ENABLE_LOGGING)
@@ -67,9 +68,6 @@ target_precompile_headers(
 target_include_directories(VoxelDynamics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 install(TARGETS VoxelDynamics DESTINATION lib)
-
-# install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/VoxelDynamics.hpp DESTINATION
-# include)
 
 install(
   DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/

@@ -13,7 +13,7 @@ add_executable(Sandbox src/Sandbox.cpp)
 
 string(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_UPPER)
 if(CMAKE_BUILD_TYPE_UPPER MATCHES "RELEASE")
-  message("Logging is disabled")
+  message("Logging is disabled for ${PROJECT_NAME}")
 else()
   option(ENABLE_LOGGING "Enable application logging" ON)
   target_compile_definitions(Sandbox PRIVATE ENABLE_LOGGING)
