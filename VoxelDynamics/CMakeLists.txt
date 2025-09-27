@@ -61,6 +61,7 @@ target_precompile_headers(
   <unordered_set>
   <variant>
   <vector>
+  src/VoxelDynamics/Core/Bitmask.hpp
   src/VoxelDynamics/Core/Log.hpp)
 
 target_include_directories(VoxelDynamics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
