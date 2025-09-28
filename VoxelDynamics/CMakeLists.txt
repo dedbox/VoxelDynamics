@@ -11,8 +11,10 @@ add_subdirectory(stb)
 
 # ##############################################################################
 
-add_library(VoxelDynamics STATIC src/VoxelDynamics/Core/Log.cpp
-                                 src/VoxelDynamics/Shader/ShaderCompiler.cpp)
+add_library(
+  VoxelDynamics STATIC
+  src/VoxelDynamics/Core/Log.cpp src/VoxelDynamics/Core/Window.cpp
+  src/VoxelDynamics/Shader/ShaderCompiler.cpp)
 
 string(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_UPPER)
 if(CMAKE_BUILD_TYPE_UPPER MATCHES "RELEASE")
@@ -24,10 +26,18 @@ endif()
 
 target_link_libraries(
   VoxelDynamics
-  PRIVATE glfw Threads::Threads Taskflow::Taskflow Vulkan::glslang
-          glslang-default-resource-limits spdlog::spdlog)
+  PRIVATE glfw
+          Threads::Threads
+          Taskflow::Taskflow
+          Vulkan::Vulkan
+          Vulkan::glslang
+          glslang-default-resource-limits
+          spdlog::spdlog)
 
-target_link_libraries(VoxelDynamics PUBLIC Vulkan::Vulkan stb_image_lib ktx)
+target_link_libraries(VoxelDynamics PUBLIC stb_image_lib ktx)
+
+target_include_directories(VoxelDynamics
+                           PUBLIC $<BUILD_INTERFACE:${glfw_SOURCE_DIR}/include>)
 
 target_precompile_headers(
   VoxelDynamics
@@ -50,6 +60,7 @@ target_precompile_headers(
   <ranges>
   <set>
   <span>
+  <source_location>
   <stdexcept>
   <string>
   <string_view>

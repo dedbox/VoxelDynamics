@@ -1,94 +1,30 @@
-// #include "GLFW/glfw3.h"
-
 // #include "taskflow/algorithm/for_each.hpp"
 // #include "taskflow/taskflow.hpp"
-// #include "vulkan/vulkan.hpp"
 
-#include "ktx.h"
-#include "vulkan/vulkan.hpp"
+// #include "stb_image.h"
+// #include "stb_image_resize2.h"
 
-#include "stb_image.h"
-#include "stb_image_resize2.h"
+// #include "ktx.h"
 
 #include <VoxelDynamics.hpp>
 
 // GLFW ////////////////////////////////////////////////////////////////////////////////////////////
 
-// namespace
-// {
+int main()
+{
+    using Log = VoxelDynamics::Log;
+    Log::Init("Sandbox");
 
-// GLFWwindow* initWindow(const std::string& windowTitle, uint32_t& outWidth, uint32_t& outHeight)
-// {
-//     glfwSetErrorCallback([](int error, const char* description) {
-//         std::print("GLFW Error ({}): {}\n", error, description);
-//     });
+    uint32_t width  = 960;
+    uint32_t height = 540;
 
-//     if (!glfwInit())
-//         return nullptr;
+    VoxelDynamics::Window window("Simple Example", std::make_pair(width, height));
 
-//     const bool wantWholeArea = !(outWidth && outHeight);
+    while (window.isAlive())
+        window.handleEvents();
 
-//     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-//     glfwWindowHint(GLFW_RESIZABLE, wantWholeArea ? GLFW_FALSE : GLFW_TRUE);
-
-//     GLFWmonitor* monitor    = glfwGetPrimaryMonitor();
-//     const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-
-//     int x = 0;
-//     int y = 0;
-//     int w = mode->width;
-//     int h = mode->height;
-
-//     if (wantWholeArea)
-//         glfwGetMonitorWorkarea(monitor, &x, &y, &w, &h);
-//     else
-//     {
-//         w = static_cast<int>(outWidth);
-//         h = static_cast<int>(outHeight);
-//     }
-
-//     GLFWwindow* window = glfwCreateWindow(w, h, windowTitle.c_str(), nullptr, nullptr);
-//     if (!window)
-//     {
-//         glfwTerminate();
-//         return nullptr;
-//     }
-
-//     if (wantWholeArea)
-//         glfwSetWindowPos(window, x, y);
-
-//     glfwGetWindowSize(window, &w, &h);
-
-//     outWidth  = w;
-//     outHeight = h;
-
-//     glfwSetKeyCallback(window, [](GLFWwindow* window, int key, int, int action, int) {
-//         if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-//             glfwSetWindowShouldClose(window, GLFW_TRUE);
-//     });
-
-//     return window;
-// }
-
-// } // namespace
-
-// int main()
-// {
-//     uint32_t width  = 1280;
-//     uint32_t height = 800;
-
-//     GLFWwindow* window = initWindow("GLFW Example", width, height);
-
-//     VoxelDynamics::Hello();
-
-//     while (!glfwWindowShouldClose(window))
-//     {
-//         glfwPollEvents();
-//     }
-
-//     glfwTerminate();
-//     return 0;
-// }
+    return 0;
+}
 
 // Taskflow ////////////////////////////////////////////////////////////////////////////////////////
 
@@ -148,88 +84,89 @@
 
 // BC7 /////////////////////////////////////////////////////////////////////////////////////////////
 
-namespace
-{
+// namespace
+// {
 
-// from
+// // from
+// //
 // https://github.com/corporateshark/lightweightvk/blob/92219fb90b9f2b66bfc13708e60cee5b3fbf7e74/lvk/LVK.h
-constexpr uint32_t calcNumMipLevels(uint32_t width, uint32_t height)
-{
-    uint32_t levels = 1;
+// constexpr uint32_t calcNumMipLevels(uint32_t width, uint32_t height)
+// {
+//     uint32_t levels = 1;
 
-    while ((width | height) >> levels)
-        levels++;
+//     while ((width | height) >> levels)
+//         levels++;
 
-    return levels;
-}
+//     return levels;
+// }
 
-} // namespace
+// } // namespace
 
-int main()
-{
-    using Log = VoxelDynamics::Log;
-    Log::Init("Sandbox");
+// int main()
+// {
+//     using Log = VoxelDynamics::Log;
+//     Log::Init("Sandbox");
 
-    const std::string inFileName  = "assets/wood.jpg";
-    const std::string outFileName = "assets/wood.ktx";
+//     const std::string inFileName  = "assets/wood.jpg";
+//     const std::string outFileName = "assets/wood.ktx";
 
-    Log::Info("Loading texture from file `{}'", inFileName);
-    const int numChannels = 4;
-    int origW = 0, origH = 0;
-    uint8_t* pixels = stbi_load(inFileName.c_str(), &origW, &origH, nullptr, numChannels);
+//     Log::Info("Loading texture from file `{}'", inFileName);
+//     const int numChannels = 4;
+//     int origW = 0, origH = 0;
+//     uint8_t* pixels = stbi_load(inFileName.c_str(), &origW, &origH, nullptr, numChannels);
 
-    Log::Assert(pixels, "Could not load texture `{}'", inFileName);
+//     Log::Assert(pixels, "Could not load texture `{}'", inFileName);
 
-    Log::Info("Creating KTX2 texture");
-    const uint32_t numMipLevels = calcNumMipLevels(origW, origH);
+//     Log::Info("Creating KTX2 texture");
+//     const uint32_t numMipLevels = calcNumMipLevels(origW, origH);
 
-    ktxTextureCreateInfo createInfoKTX2{
-        .vkFormat        = VK_FORMAT_R8G8B8A8_UNORM,
-        .baseWidth       = static_cast<uint32_t>(origW),
-        .baseHeight      = static_cast<uint32_t>(origH),
-        .baseDepth       = 1U,
-        .numDimensions   = 2U,
-        .numLevels       = numMipLevels,
-        .numLayers       = 1U,
-        .numFaces        = 1U,
-        .isArray         = KTX_FALSE,
-        .generateMipmaps = KTX_FALSE,
-    };
+//     ktxTextureCreateInfo createInfoKTX2{
+//         .vkFormat        = VK_FORMAT_R8G8B8A8_UNORM,
+//         .baseWidth       = static_cast<uint32_t>(origW),
+//         .baseHeight      = static_cast<uint32_t>(origH),
+//         .baseDepth       = 1U,
+//         .numDimensions   = 2U,
+//         .numLevels       = numMipLevels,
+//         .numLayers       = 1U,
+//         .numFaces        = 1U,
+//         .isArray         = KTX_FALSE,
+//         .generateMipmaps = KTX_FALSE,
+//     };
 
-    ktxTexture2* textureKTX2 = nullptr;
-    if (ktxTexture2_Create(&createInfoKTX2, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &textureKTX2) !=
-        KTX_SUCCESS)
-        Log::Assert(false, "Could not create KTX2 texture");
+//     ktxTexture2* textureKTX2 = nullptr;
+//     if (ktxTexture2_Create(&createInfoKTX2, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &textureKTX2) !=
+//         KTX_SUCCESS)
+//         Log::Assert(false, "Could not create KTX2 texture");
 
-    int w = origW;
-    int h = origH;
+//     int w = origW;
+//     int h = origH;
 
-    Log::Info("Generating custom mip-pyramid");
-    for (uint32_t i = 0; i != numMipLevels; ++i)
-    {
-        size_t offset = 0;
-        ktxTexture2_GetImageOffset(textureKTX2, i, 0, 0, &offset);
-        stbir_resize_uint8_linear(
-            pixels, origW, origH, 0, textureKTX2->pData + offset, w, h, 0, STBIR_RGBA); // NOLINT
+//     Log::Info("Generating custom mip-pyramid");
+//     for (uint32_t i = 0; i != numMipLevels; ++i)
+//     {
+//         size_t offset = 0;
+//         ktxTexture2_GetImageOffset(textureKTX2, i, 0, 0, &offset);
+//         stbir_resize_uint8_linear(
+//             pixels, origW, origH, 0, textureKTX2->pData + offset, w, h, 0, STBIR_RGBA); // NOLINT
 
-        h = h > 1 ? h >> 1 : 1; // NOLINT
-        w = w > 1 ? w >> 1 : 1; // NOLINT
-    }
+//         h = h > 1 ? h >> 1 : 1; // NOLINT
+//         w = w > 1 ? w >> 1 : 1; // NOLINT
+//     }
 
-    Log::Info("Compressing KTX2 texture to Basis");
-    if (ktxTexture2_CompressBasis(textureKTX2, 255) != KTX_SUCCESS)
-        Log::Assert(false, "Could not compress KTX2 texture");
+//     Log::Info("Compressing KTX2 texture to Basis");
+//     if (ktxTexture2_CompressBasis(textureKTX2, 255) != KTX_SUCCESS)
+//         Log::Assert(false, "Could not compress KTX2 texture");
 
-    Log::Info("Transcoding KTX2 texture");
-    if (ktxTexture2_TranscodeBasis(textureKTX2, KTX_TTF_BC7_RGBA, 0) != KTX_SUCCESS)
-        Log::Assert(false, "Could not transcode KTX2 texture");
+//     Log::Info("Transcoding KTX2 texture");
+//     if (ktxTexture2_TranscodeBasis(textureKTX2, KTX_TTF_BC7_RGBA, 0) != KTX_SUCCESS)
+//         Log::Assert(false, "Could not transcode KTX2 texture");
 
-    Log::Info("Writing KTX2 texture to file `{}'", outFileName);
-    ktxTexture2_WriteToNamedFile(textureKTX2, outFileName.c_str());
-    ktxTexture2_Destroy(textureKTX2);
+//     Log::Info("Writing KTX2 texture to file `{}'", outFileName);
+//     ktxTexture2_WriteToNamedFile(textureKTX2, outFileName.c_str());
+//     ktxTexture2_Destroy(textureKTX2);
 
-    if (pixels)
-        stbi_image_free(pixels);
+//     if (pixels)
+//         stbi_image_free(pixels);
 
-    return 0;
-}
+//     return 0;
+// }
