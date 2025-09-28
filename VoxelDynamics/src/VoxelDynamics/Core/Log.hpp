@@ -83,6 +83,17 @@ public:
             if constexpr (is_logging_enabled)
                 GetCore()->critical(fmt, std::forward<Args>(args)...);
         }
+
+        template <typename... Args>
+        static void Assert(bool condition, spdlog::format_string_t<Args...> fmt, Args&&... args)
+        {
+            if constexpr (is_logging_enabled)
+                if (!condition)
+                {
+                    Critical(fmt, std::forward<Args>(args)...);
+                    __builtin_trap();
+                }
+        }
     };
 
     template <typename... Args>
@@ -126,33 +137,17 @@ public:
         if constexpr (is_logging_enabled)
             GetClient()->critical(fmt, std::forward<Args>(args)...);
     }
+
+    template <typename... Args>
+    static void Assert(bool condition, spdlog::format_string_t<Args...> fmt, Args&&... args)
+    {
+        if constexpr (is_logging_enabled)
+            if (!condition)
+            {
+                Critical(fmt, std::forward<Args>(args)...);
+                __builtin_trap();
+            }
+    }
 };
-
-namespace Core
-{
-
-template <typename... Args>
-static void Assert(bool condition, spdlog::format_string_t<Args...> fmt, Args&&... args)
-{
-    if constexpr (is_logging_enabled)
-        if (!condition)
-        {
-            Log::Core::Critical(fmt, std::forward<Args>(args)...);
-            __builtin_trap();
-        }
-}
-
-} // namespace Core
-
-template <typename... Args>
-static void Assert(bool condition, spdlog::format_string_t<Args...> fmt, Args&&... args)
-{
-    if constexpr (is_logging_enabled)
-        if (!condition)
-        {
-            Log::Critical(fmt, std::forward<Args>(args)...);
-            __builtin_trap();
-        }
-}
 
 } // namespace VoxelDynamics
