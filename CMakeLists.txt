@@ -73,6 +73,16 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(spdlog)
 
+# ktx ##########################################################################
+
+FetchContent_Declare(
+  ktx
+  GIT_REPOSITORY https://github.com/KhronosGroup/KTX-Software.git
+  GIT_TAG main
+  GIT_SHALLOW YES)
+
+FetchContent_MakeAvailable(ktx)
+
 # ##############################################################################
 
 add_subdirectory(VoxelDynamics)

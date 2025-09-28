@@ -7,6 +7,8 @@ set(CMAKE_CXX_EXTENSIONS ON)
 
 set(BUILD_SHARED_LIBS OFF)
 
+add_subdirectory(stb)
+
 # ##############################################################################
 
 add_library(VoxelDynamics STATIC src/VoxelDynamics/Core/Log.cpp
@@ -22,13 +24,10 @@ endif()
 
 target_link_libraries(
   VoxelDynamics
-  PRIVATE glfw
-          Threads::Threads
-          Taskflow::Taskflow
-          Vulkan::Vulkan
-          Vulkan::glslang
-          glslang-default-resource-limits
-          spdlog::spdlog)
+  PRIVATE glfw Threads::Threads Taskflow::Taskflow Vulkan::glslang
+          glslang-default-resource-limits spdlog::spdlog)
+
+target_link_libraries(VoxelDynamics PUBLIC Vulkan::Vulkan stb_image_lib ktx)
 
 target_precompile_headers(
   VoxelDynamics
