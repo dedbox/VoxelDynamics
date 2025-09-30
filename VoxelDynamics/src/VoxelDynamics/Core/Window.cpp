@@ -8,13 +8,6 @@ namespace VoxelDynamics
 
 Window::Window(const std::string& title, std::optional<std::pair<uint32_t, uint32_t>> size)
 {
-    glfwSetErrorCallback([](int code, const char* description) {
-        Log::Core::Error("GLFW Error ({}): {}", code, description);
-    });
-
-    if (glfwInit() != GLFW_TRUE)
-        return;
-
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, size ? GLFW_TRUE : GLFW_FALSE);
 
@@ -45,11 +38,6 @@ Window::Window(const std::string& title, std::optional<std::pair<uint32_t, uint3
         if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
             glfwSetWindowShouldClose(window, GLFW_TRUE);
     });
-}
-
-Window::~Window()
-{
-    glfwTerminate();
 }
 
 std::pair<uint32_t, uint32_t> Window::getSize() const

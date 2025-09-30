@@ -12,8 +12,6 @@ public:
     explicit Window(
         const std::string& title, std::optional<std::pair<uint32_t, uint32_t>> size = std::nullopt);
 
-    ~Window();
-
     // allow copy
     Window(const Window&)            = default;
     Window& operator=(const Window&) = default;

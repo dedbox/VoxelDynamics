@@ -14,21 +14,13 @@ int main()
 
     Log::Init("Sandbox");
 
-    uint32_t width  = 960;
-    uint32_t height = 540;
+    Application::CreateInfo createInfo{
+        .title  = "Simple Example",
+        .width  = 960,
+        .height = 540,
+    };
 
-    Window window("Simple Example", std::make_pair(width, height));
-
-    VulkanContext context(
-        window,
-        {.appName             = "Simple Example",
-         .appVersion          = Version(1, 0, 0),
-         .width               = width,
-         .height              = height,
-         .preferredDeviceType = DeviceType::Discrete});
-
-    while (window.isAlive())
-        window.handleEvents();
+    Application(createInfo).run();
 
     return 0;
 }
