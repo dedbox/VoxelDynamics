@@ -5,12 +5,6 @@
 namespace VoxelDynamics
 {
 
-#ifndef ENABLE_LOGGING
-inline constexpr bool is_logging_enabled = false;
-#else
-inline constexpr bool is_logging_enabled = true;
-#endif
-
 class Log
 {
 public:

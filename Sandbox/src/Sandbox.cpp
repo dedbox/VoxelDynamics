@@ -8,17 +8,24 @@
 
 #include <VoxelDynamics.hpp>
 
-// GLFW ////////////////////////////////////////////////////////////////////////////////////////////
-
 int main()
 {
-    using Log = VoxelDynamics::Log;
+    using namespace VoxelDynamics;
+
     Log::Init("Sandbox");
 
     uint32_t width  = 960;
     uint32_t height = 540;
 
-    VoxelDynamics::Window window("Simple Example", std::make_pair(width, height));
+    Window window("Simple Example", std::make_pair(width, height));
+
+    VulkanContext context(
+        window,
+        {.appName             = "Simple Example",
+         .appVersion          = Version(1, 0, 0),
+         .width               = width,
+         .height              = height,
+         .preferredDeviceType = DeviceType::Discrete});
 
     while (window.isAlive())
         window.handleEvents();

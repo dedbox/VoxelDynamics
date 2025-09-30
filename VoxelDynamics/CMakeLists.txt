@@ -14,14 +14,19 @@ add_subdirectory(stb)
 add_library(
   VoxelDynamics STATIC
   src/VoxelDynamics/Core/Log.cpp src/VoxelDynamics/Core/Window.cpp
+  src/VoxelDynamics/Renderer/VulkanContext.cpp
   src/VoxelDynamics/Shader/ShaderCompiler.cpp)
+
+option(ENABLE_LOGGING "Enable application logging" OFF)
+option(ENABLE_DEBUGGING "Enable application debugging instrumentation" OFF)
 
 string(TOUPPER "${CMAKE_BUILD_TYPE}" CMAKE_BUILD_TYPE_UPPER)
 if(CMAKE_BUILD_TYPE_UPPER MATCHES "RELEASE")
   message("Logging is disabled for ${PROJECT_NAME}")
+  message("Debugging is disabled for ${PROJECT_NAME}")
 else()
-  option(ENABLE_LOGGING "Enable application logging" ON)
-  target_compile_definitions(VoxelDynamics PRIVATE ENABLE_LOGGING)
+  target_compile_definitions(VoxelDynamics PRIVATE ENABLE_LOGGING
+                                                   ENABLE_DEBUGGING)
 endif()
 
 target_link_libraries(
@@ -36,8 +41,8 @@ target_link_libraries(
 
 target_link_libraries(VoxelDynamics PUBLIC stb_image_lib ktx)
 
-target_include_directories(VoxelDynamics
-                           PUBLIC $<BUILD_INTERFACE:${glfw_SOURCE_DIR}/include>)
+target_include_directories(VoxelDynamics INTERFACE ${glfw_SOURCE_DIR}/include
+                                                   ${Vulkan_INCLUDE_DIRS})
 
 target_precompile_headers(
   VoxelDynamics
@@ -72,6 +77,7 @@ target_precompile_headers(
   <unordered_set>
   <variant>
   <vector>
+  src/VoxelDynamics/Config.hpp
   src/VoxelDynamics/Core/Bitmask.hpp
   src/VoxelDynamics/Core/Log.hpp)
 

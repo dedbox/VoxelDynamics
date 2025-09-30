@@ -1,6 +1,7 @@
 #include "VoxelDynamics/Core/Window.hpp"
 
 #include "VoxelDynamics/Core/Log.hpp"
+#include "vulkan/vulkan_core.h"
 
 namespace VoxelDynamics
 {
@@ -56,6 +57,14 @@ std::pair<uint32_t, uint32_t> Window::getSize() const
     int width{}, height{};
     glfwGetWindowSize(_window, &width, &height);
     return std::make_pair(width, height);
+}
+
+VkSurfaceKHR Window::createSurface(const VkInstance& instance) const
+{
+    VkSurfaceKHR surface{VK_NULL_HANDLE};
+    VkResult error = glfwCreateWindowSurface(instance, _window, nullptr, &surface);
+    Log::Core::Assert(!error, "Could not create window surface");
+    return surface;
 }
 
 bool Window::isAlive() const

@@ -30,10 +30,10 @@ void Log::Init(const std::string& clientName)
     spdlog::set_pattern("%^[%T.%f] %n: %v%$");
 
     CoreLogger = spdlog::stdout_color_mt("ENGINE");
-    SetCoreLevel(Level::Trace);
+    SetCoreLevel(Level::Info);
 
     ClientLogger = spdlog::stdout_color_mt(clientName);
-    SetClientLevel(Level::Trace);
+    SetClientLevel(Level::Info);
 }
 
 } // namespace VoxelDynamics

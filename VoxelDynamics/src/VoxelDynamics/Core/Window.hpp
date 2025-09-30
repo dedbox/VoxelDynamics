@@ -1,5 +1,6 @@
 #pragma once
 
+#define GLFW_INCLUDE_VULKAN
 #include "GLFW/glfw3.h"
 
 namespace VoxelDynamics
@@ -22,6 +23,8 @@ public:
     Window& operator=(Window&&) = delete;
 
     std::pair<uint32_t, uint32_t> getSize() const;
+
+    VkSurfaceKHR createSurface(const VkInstance& instance) const;
 
     bool isAlive() const;
     void handleEvents() const;
