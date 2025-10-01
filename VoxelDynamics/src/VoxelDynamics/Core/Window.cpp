@@ -1,6 +1,5 @@
 #include "VoxelDynamics/Core/Window.hpp"
 
-#include "VoxelDynamics/Core/Log.hpp"
 #include "vulkan/vulkan_core.h"
 
 namespace VoxelDynamics

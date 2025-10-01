@@ -34,6 +34,12 @@ public:
     VulkanContext(const Window& window, const CreateInfo& createInfo);
 
 private:
+    using FeaturesChain = vk::StructureChain<
+        vk::PhysicalDeviceFeatures2,
+        vk::PhysicalDeviceVulkan11Features,
+        vk::PhysicalDeviceVulkan12Features,
+        vk::PhysicalDeviceVulkan13Features>;
+
     struct PhysicalDevice
     {
         vk::raii::PhysicalDevice handle;
@@ -41,13 +47,25 @@ private:
         uint32_t computeQueueFamilyIndex;
         std::vector<vk::SurfaceFormatKHR> surfaceFormats;
         std::vector<vk::PresentModeKHR> surfacePresentModes;
+        FeaturesChain features;
+    };
+
+    struct Device
+    {
+        vk::raii::Device handle;
+        vk::raii::Queue graphiceQueue;
+        vk::raii::Queue computeQueue;
+        vk::PhysicalDeviceFeatures features10;
+        vk::PhysicalDeviceVulkan11Features features11;
+        vk::PhysicalDeviceVulkan12Features features12;
+        vk::PhysicalDeviceVulkan13Features features13;
     };
 
     vk::raii::Context _context;
     vk::raii::Instance _instance;
     vk::raii::SurfaceKHR _surface;
     PhysicalDevice _physicalDevice;
-    vk::raii::Device _device;
+    Device _device;
 
     // CreateInstance //////////////////////////////////////////////////////////////////////////////
 
@@ -80,7 +98,8 @@ private:
     static bool CheckDeviceExtensions(
         const vk::raii::PhysicalDevice& physicalDevice, const std::vector<const char*>& extensions);
 
-    static bool CheckDeviceFeatures(const vk::raii::PhysicalDevice& physicalDevice);
+    static std::optional<FeaturesChain> DeviceFeatures(
+        const vk::raii::PhysicalDevice& physicalDevice);
 
     std::optional<std::pair<uint32_t, uint32_t>> findQueueFamilyIndices(
         const vk::raii::PhysicalDevice& physicalDevice);
@@ -90,7 +109,7 @@ private:
 
     // CreateDevice ////////////////////////////////////////////////////////////////////////////////
 
-    vk::raii::Device CreateDevice();
+    Device CreateDevice(const std::vector<const char*>& deviceExtensions);
 };
 
 } // namespace VoxelDynamics

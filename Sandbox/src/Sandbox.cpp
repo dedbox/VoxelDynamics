@@ -14,6 +14,8 @@ int main()
 
     Log::Init("Sandbox");
 
+    Log::SetLevel(VoxelDynamics::Log::Level::Trace);
+
     Application::CreateInfo createInfo{
         .title  = "Simple Example",
         .width  = 960,
