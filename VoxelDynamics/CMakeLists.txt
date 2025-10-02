@@ -17,6 +17,7 @@ add_library(
   src/VoxelDynamics/Core/Log.cpp
   src/VoxelDynamics/Core/Window.cpp
   src/VoxelDynamics/Renderer/Vulkan/Context.cpp
+  src/VoxelDynamics/Renderer/Vulkan/Instance.cpp
   src/VoxelDynamics/Renderer/Vulkan/PhysicalDevice.cpp
   src/VoxelDynamics/Shader/ShaderCompiler.cpp)
 

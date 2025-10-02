@@ -3,6 +3,7 @@
 #include "vulkan/vulkan_raii.hpp"
 
 #include "VoxelDynamics/Core/Window.hpp"
+#include "VoxelDynamics/Renderer/Vulkan/Instance.hpp"
 #include "VoxelDynamics/Renderer/Vulkan/PhysicalDevice.hpp"
 
 namespace VoxelDynamics::Vulkan
@@ -34,27 +35,10 @@ private:
     };
 
     vk::raii::Context _context;
-    vk::raii::Instance _instance;
+    Instance _instance;
     vk::raii::SurfaceKHR _surface;
     PhysicalDevice _physicalDevice;
     Device _device;
-
-    // CreateInstance //////////////////////////////////////////////////////////////////////////////
-
-    vk::raii::Instance createInstance(const CreateInfo& createInfo);
-
-    static VKAPI_ATTR vk::Bool32 VKAPI_CALL DebugUtilsMessengerCallback(
-        vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-        vk::DebugUtilsMessageTypeFlagsEXT /*messageTypes*/,
-        vk::DebugUtilsMessengerCallbackDataEXT const* pCallbackData,
-        void* /*pUserData*/);
-    vk::DebugUtilsMessengerCreateInfoEXT DebugUtilsMessengerCreateInfoEXT();
-
-    static std::vector<const char*> ValidationLayers();
-    static std::vector<const char*> InstanceExtensions();
-
-    static void CheckValidationLayers(const std::vector<const char*>& layers);
-    static void CheckInstanceExtensions(const std::vector<const char*>& extensions);
 
     // CreateDevice ////////////////////////////////////////////////////////////////////////////////
 
