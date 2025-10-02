@@ -1,7 +1,7 @@
 #pragma once
 
 #include "VoxelDynamics/Core/Window.hpp"
-#include "VoxelDynamics/Renderer/VulkanContext.hpp"
+#include "VoxelDynamics/Renderer/Vulkan/Context.hpp"
 
 namespace VoxelDynamics
 {
@@ -14,10 +14,10 @@ public:
         std::string title;
         uint32_t width;
         uint32_t height;
-        VulkanContext::CreateInfo context = {
+        Vulkan::Context::CreateInfo context = {
             .appName             = title,
             .appVersion          = Version(1, 0, 0),
-            .preferredDeviceType = DeviceType::Discrete,
+            .preferredDeviceType = Vulkan::DeviceType::Discrete,
         };
     };
 
@@ -34,7 +34,7 @@ public:
 
 private:
     std::unique_ptr<Window> _window;
-    std::unique_ptr<VulkanContext> _context;
+    std::unique_ptr<Vulkan::Context> _context;
 };
 
 } // namespace VoxelDynamics

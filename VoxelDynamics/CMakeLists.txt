@@ -16,7 +16,7 @@ add_library(
   src/VoxelDynamics/Application.cpp
   src/VoxelDynamics/Core/Log.cpp
   src/VoxelDynamics/Core/Window.cpp
-  src/VoxelDynamics/Renderer/VulkanContext.cpp
+  src/VoxelDynamics/Renderer/Vulkan/Context.cpp
   src/VoxelDynamics/Shader/ShaderCompiler.cpp)
 
 option(ENABLE_LOGGING "Enable application logging" OFF)

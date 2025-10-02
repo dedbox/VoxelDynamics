@@ -4,7 +4,7 @@
 
 #include "VoxelDynamics/Core/Window.hpp"
 
-namespace VoxelDynamics
+namespace VoxelDynamics::Vulkan
 {
 
 enum class DeviceType : uint8_t
@@ -20,7 +20,7 @@ inline VkPhysicalDeviceType toNative(DeviceType type)
     return static_cast<VkPhysicalDeviceType>(type);
 }
 
-class VulkanContext
+class Context
 {
 public:
     struct CreateInfo
@@ -31,7 +31,7 @@ public:
         std::vector<const char*> deviceExtensions;
     };
 
-    VulkanContext(const Window& window, const CreateInfo& createInfo);
+    Context(const Window& window, const CreateInfo& createInfo);
 
 private:
     using FeaturesChain = vk::StructureChain<
@@ -112,4 +112,4 @@ private:
     Device CreateDevice(const std::vector<const char*>& deviceExtensions);
 };
 
-} // namespace VoxelDynamics
+} // namespace VoxelDynamics::Vulkan

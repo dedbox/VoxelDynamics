@@ -17,7 +17,7 @@ Application::Application(const CreateInfo& createInfo)
     _window = std::make_unique<Window>(
         createInfo.title, std::make_pair(createInfo.width, createInfo.height));
 
-    _context = std::make_unique<VulkanContext>(*_window, createInfo.context);
+    _context = std::make_unique<Vulkan::Context>(*_window, createInfo.context);
 }
 
 Application::~Application()

@@ -1,9 +1,9 @@
-#include "VoxelDynamics/Renderer/VulkanContext.hpp"
+#include "VoxelDynamics/Renderer/Vulkan/Context.hpp"
 
-namespace VoxelDynamics
+namespace VoxelDynamics::Vulkan
 {
 
-VulkanContext::VulkanContext(const Window& window, const CreateInfo& createInfo)
+Context::Context(const Window& window, const CreateInfo& createInfo)
     : _instance(createInstance(createInfo))
     , _surface(createSurface(window))
     , _physicalDevice(pickPhysicalDevice(createInfo))
@@ -13,7 +13,7 @@ VulkanContext::VulkanContext(const Window& window, const CreateInfo& createInfo)
 
 // CreateInstance //////////////////////////////////////////////////////////////////////////////////
 
-vk::raii::Instance VulkanContext::createInstance(const CreateInfo& createInfo)
+vk::raii::Instance Context::createInstance(const CreateInfo& createInfo)
 {
     vk::ApplicationInfo appInfo(
         createInfo.appName.c_str(),
@@ -40,7 +40,7 @@ vk::raii::Instance VulkanContext::createInstance(const CreateInfo& createInfo)
         return vk::raii::Instance(_context, instanceCreateInfo);
 }
 
-std::vector<const char*> VulkanContext::ValidationLayers()
+std::vector<const char*> Context::ValidationLayers()
 {
     if constexpr (is_debugging_enabled)
         return {
@@ -51,7 +51,7 @@ std::vector<const char*> VulkanContext::ValidationLayers()
         return {};
 }
 
-std::vector<const char*> VulkanContext::InstanceExtensions()
+std::vector<const char*> Context::InstanceExtensions()
 {
     uint32_t count; // NOLINT
     const auto raw_extensions = glfwGetRequiredInstanceExtensions(&count);
@@ -61,7 +61,7 @@ std::vector<const char*> VulkanContext::InstanceExtensions()
     return extensions;
 }
 
-VKAPI_ATTR vk::Bool32 VKAPI_CALL VulkanContext::DebugUtilsMessengerCallback(
+VKAPI_ATTR vk::Bool32 VKAPI_CALL Context::DebugUtilsMessengerCallback(
     vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     vk::DebugUtilsMessageTypeFlagsEXT /*messageTypes*/,
     vk::DebugUtilsMessengerCallbackDataEXT const* pCallbackData,
@@ -85,7 +85,7 @@ VKAPI_ATTR vk::Bool32 VKAPI_CALL VulkanContext::DebugUtilsMessengerCallback(
     return vk::False;
 }
 
-vk::DebugUtilsMessengerCreateInfoEXT VulkanContext::DebugUtilsMessengerCreateInfoEXT()
+vk::DebugUtilsMessengerCreateInfoEXT Context::DebugUtilsMessengerCreateInfoEXT()
 {
     constexpr vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(
         vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
@@ -103,7 +103,7 @@ vk::DebugUtilsMessengerCreateInfoEXT VulkanContext::DebugUtilsMessengerCreateInf
     return createInfo;
 }
 
-void VulkanContext::CheckValidationLayers(const std::vector<const char*>& layers)
+void Context::CheckValidationLayers(const std::vector<const char*>& layers)
 {
     auto required =
         layers | std::ranges::views::transform([](const auto layer) { return std::string(layer); });
@@ -130,7 +130,7 @@ void VulkanContext::CheckValidationLayers(const std::vector<const char*>& layers
             Log::Core::Warn("Unsupported validation layer: {}", layer);
 }
 
-void VulkanContext::CheckInstanceExtensions(const std::vector<const char*>& extensions)
+void Context::CheckInstanceExtensions(const std::vector<const char*>& extensions)
 {
     const auto required =
         extensions | std::ranges::views::transform([](const auto ext) { return std::string(ext); });
@@ -159,14 +159,14 @@ void VulkanContext::CheckInstanceExtensions(const std::vector<const char*>& exte
 
 // CreateSurface ///////////////////////////////////////////////////////////////////////////////////
 
-vk::raii::SurfaceKHR VulkanContext::createSurface(const Window& window)
+vk::raii::SurfaceKHR Context::createSurface(const Window& window)
 {
     return vk::raii::SurfaceKHR(_instance, window.createSurface(*_instance));
 }
 
 // PickPhysicaldevice //////////////////////////////////////////////////////////////////////////////
 
-VulkanContext::PhysicalDevice VulkanContext::pickPhysicalDevice(const CreateInfo& createInfo)
+Context::PhysicalDevice Context::pickPhysicalDevice(const CreateInfo& createInfo)
 {
     // Get all physical devices
     vk::raii::PhysicalDevices allPhysicalDevices(_instance);
@@ -287,7 +287,7 @@ VulkanContext::PhysicalDevice VulkanContext::pickPhysicalDevice(const CreateInfo
     throw std::runtime_error("No suitable physical device found");
 }
 
-std::optional<std::pair<uint32_t, uint32_t>> VulkanContext::findQueueFamilyIndices(
+std::optional<std::pair<uint32_t, uint32_t>> Context::findQueueFamilyIndices(
     const vk::raii::PhysicalDevice& physicalDevice)
 {
     const auto families = physicalDevice.getQueueFamilyProperties();
@@ -319,15 +319,14 @@ std::optional<std::pair<uint32_t, uint32_t>> VulkanContext::findQueueFamilyIndic
     return std::nullopt;
 }
 
-std::vector<const char*> VulkanContext::DeviceExtensions(
-    const std::vector<const char*>& deviceExtensions)
+std::vector<const char*> Context::DeviceExtensions(const std::vector<const char*>& deviceExtensions)
 {
     std::vector<const char*> extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
     extensions.append_range(deviceExtensions);
     return extensions;
 }
 
-bool VulkanContext::CheckDeviceExtensions(
+bool Context::CheckDeviceExtensions(
     const vk::raii::PhysicalDevice& physicalDevice, const std::vector<const char*>& extensions)
 {
     for (const auto& ext : extensions)
@@ -356,7 +355,7 @@ bool VulkanContext::CheckDeviceExtensions(
     return true;
 }
 
-std::optional<VulkanContext::FeaturesChain> VulkanContext::DeviceFeatures(
+std::optional<Context::FeaturesChain> Context::DeviceFeatures(
     const vk::raii::PhysicalDevice& physicalDevice)
 {
     auto [f10, features11, features12, features13] = physicalDevice.getFeatures2<
@@ -608,7 +607,7 @@ std::optional<VulkanContext::FeaturesChain> VulkanContext::DeviceFeatures(
     return featuresChain;
 }
 
-std::string VulkanContext::SurfaceFormatNames(const std::vector<vk::SurfaceFormatKHR>& formats)
+std::string Context::SurfaceFormatNames(const std::vector<vk::SurfaceFormatKHR>& formats)
 {
     const auto formatName = [](const vk::SurfaceFormatKHR& format) {
         return vk::to_string(format.format) + "+" + vk::to_string(format.colorSpace);
@@ -618,8 +617,7 @@ std::string VulkanContext::SurfaceFormatNames(const std::vector<vk::SurfaceForma
            std::ranges::views::join_with(std::string_view(", ")) | std::ranges::to<std::string>();
 }
 
-std::string VulkanContext::SufacePresentModeNames(
-    const std::vector<vk::PresentModeKHR>& presentModes)
+std::string Context::SufacePresentModeNames(const std::vector<vk::PresentModeKHR>& presentModes)
 {
     const auto modeName = [](const vk::PresentModeKHR& mode) { return vk::to_string(mode); };
 
@@ -630,7 +628,7 @@ std::string VulkanContext::SufacePresentModeNames(
 // CreateDevice
 // ////////////////////////////////////////////////////////////////////////////////////
 
-VulkanContext::Device VulkanContext::CreateDevice(const std::vector<const char*>& deviceExtensions)
+Context::Device Context::CreateDevice(const std::vector<const char*>& deviceExtensions)
 {
     const float queuePriority = 1.0F;
 
@@ -666,4 +664,4 @@ VulkanContext::Device VulkanContext::CreateDevice(const std::vector<const char*>
     return Device(std::move(device), std::move(graphicsQueue), std::move(computeQueue));
 }
 
-} // namespace VoxelDynamics
+} // namespace VoxelDynamics::Vulkan
