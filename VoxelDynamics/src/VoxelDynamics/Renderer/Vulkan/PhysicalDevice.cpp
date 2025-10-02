@@ -6,12 +6,14 @@ PhysicalDevice::PhysicalDevice(
     vk::raii::PhysicalDevice handle_,
     uint32_t graphicsQueueFamilyIndex_,
     uint32_t computeQueueFamilyIndex_,
+    vk::raii::SurfaceKHR surface_,
     std::vector<vk::SurfaceFormatKHR> surfaceFormats_,
     std::vector<vk::PresentModeKHR> surfacePresentModes_,
     const PhysicalDevice::FeaturesChain& features_)
     : handle(std::move(handle_))
     , graphicsQueueFamilyIndex(graphicsQueueFamilyIndex_)
     , computeQueueFamilyIndex(computeQueueFamilyIndex_)
+    , surface(std::move(surface_))
     , surfaceFormats(std::move(surfaceFormats_))
     , surfacePresentModes(std::move(surfacePresentModes_))
     , features(features_)
@@ -20,7 +22,7 @@ PhysicalDevice::PhysicalDevice(
 
 PhysicalDevice PhysicalDevice::Create(
     const vk::raii::Instance& instance,
-    const vk::raii::SurfaceKHR& surface,
+    vk::raii::SurfaceKHR surface,
     const PhysicalDeviceType preferredType,
     const std::vector<const char*>& extraExtensions)
 {
@@ -135,6 +137,7 @@ PhysicalDevice PhysicalDevice::Create(
                 std::move(physicalDevice),
                 queueFamilyIndices->first,
                 queueFamilyIndices->second,
+                std::move(surface),
                 formats,
                 presentModes,
                 *features);

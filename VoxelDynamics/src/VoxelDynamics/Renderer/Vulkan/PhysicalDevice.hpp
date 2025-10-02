@@ -30,13 +30,14 @@ public:
     vk::raii::PhysicalDevice handle;
     uint32_t graphicsQueueFamilyIndex;
     uint32_t computeQueueFamilyIndex;
+    vk::raii::SurfaceKHR surface;
     std::vector<vk::SurfaceFormatKHR> surfaceFormats;
     std::vector<vk::PresentModeKHR> surfacePresentModes;
     FeaturesChain features;
 
     static PhysicalDevice Create(
         const vk::raii::Instance& instance,
-        const vk::raii::SurfaceKHR& surface,
+        vk::raii::SurfaceKHR surface,
         const PhysicalDeviceType preferredType,
         const std::vector<const char*>& extraExtensions);
 
@@ -49,6 +50,7 @@ private:
         vk::raii::PhysicalDevice handle,
         uint32_t graphicsQueueFamilyIndex,
         uint32_t computeQueueFamilyIndex,
+        vk::raii::SurfaceKHR surface,
         std::vector<vk::SurfaceFormatKHR> surfaceFormats,
         std::vector<vk::PresentModeKHR> surfacePresentModes,
         const FeaturesChain& features);

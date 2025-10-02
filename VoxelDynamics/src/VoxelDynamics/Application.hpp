@@ -17,7 +17,10 @@ public:
         Vulkan::Context::CreateInfo context = {
             .appName             = title,
             .appVersion          = Version(1, 0, 0),
+            .width               = width,
+            .height              = height,
             .preferredDeviceType = Vulkan::PhysicalDeviceType::Discrete,
+            .deviceExtensions    = {},
         };
     };
 

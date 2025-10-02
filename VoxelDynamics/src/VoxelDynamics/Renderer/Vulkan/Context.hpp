@@ -17,6 +17,8 @@ public:
     {
         std::string appName;
         uint32_t appVersion;
+        uint32_t width;
+        uint32_t height;
         PhysicalDeviceType preferredDeviceType;
         std::vector<const char*> deviceExtensions;
     };
@@ -26,7 +28,6 @@ public:
 private:
     vk::raii::Context _context;
     Instance _instance;
-    vk::raii::SurfaceKHR _surface;
     PhysicalDevice _physicalDevice;
     Device _device;
 };
