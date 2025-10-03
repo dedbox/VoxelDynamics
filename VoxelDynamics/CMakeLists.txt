@@ -18,9 +18,11 @@ add_library(
   src/VoxelDynamics/Core/Window.cpp
   src/VoxelDynamics/Renderer/Vulkan/Context.cpp
   src/VoxelDynamics/Renderer/Vulkan/Device.cpp
+  src/VoxelDynamics/Renderer/Vulkan/Image.cpp
   src/VoxelDynamics/Renderer/Vulkan/Instance.cpp
   src/VoxelDynamics/Renderer/Vulkan/PhysicalDevice.cpp
   src/VoxelDynamics/Renderer/Vulkan/Surface.cpp
+  src/VoxelDynamics/Renderer/Vulkan/SwapChain.cpp
   src/VoxelDynamics/Shader/ShaderCompiler.cpp)
 
 option(ENABLE_LOGGING "Enable application logging" OFF)
@@ -63,6 +65,7 @@ target_precompile_headers(
   <functional>
   <ios>
   <iterator>
+  <limits>
   <list>
   <map>
   <memory>

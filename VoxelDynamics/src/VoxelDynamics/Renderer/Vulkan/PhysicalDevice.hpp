@@ -27,7 +27,8 @@ public:
         vk::PhysicalDeviceFeatures2,
         vk::PhysicalDeviceVulkan11Features,
         vk::PhysicalDeviceVulkan12Features,
-        vk::PhysicalDeviceVulkan13Features>;
+        vk::PhysicalDeviceVulkan13Features,
+        vk::PhysicalDeviceTimelineSemaphoreFeatures>;
 
     vk::raii::PhysicalDevice handle;
     uint32_t graphicsQueueFamilyIndex;

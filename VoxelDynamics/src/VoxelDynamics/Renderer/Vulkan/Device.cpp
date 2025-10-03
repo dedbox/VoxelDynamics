@@ -48,4 +48,10 @@ Device Device::Create(
     return Device(std::move(device), std::move(graphicsQueue), std::move(computeQueue));
 }
 
+void Device::setDebugName(vk::ObjectType type, uint64_t objHandle, const std::string& name) const
+{
+    handle.setDebugUtilsObjectNameEXT(
+        vk::DebugUtilsObjectNameInfoEXT(type, objHandle, name.c_str()));
+}
+
 } // namespace VoxelDynamics::Vulkan

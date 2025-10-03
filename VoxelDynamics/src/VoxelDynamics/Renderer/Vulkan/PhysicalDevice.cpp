@@ -211,13 +211,16 @@ std::optional<std::pair<uint32_t, uint32_t>> PhysicalDevice::findQueueFamilyIndi
 std::optional<PhysicalDevice::FeaturesChain> PhysicalDevice::Features(
     const vk::raii::PhysicalDevice& physicalDevice)
 {
-    auto [f10, features11, features12, features13] = physicalDevice.getFeatures2<
+    auto [f10, features11, features12, features13, fTL] = physicalDevice.getFeatures2<
         vk::PhysicalDeviceFeatures2,
         vk::PhysicalDeviceVulkan11Features,
         vk::PhysicalDeviceVulkan12Features,
-        vk::PhysicalDeviceVulkan13Features>();
+        vk::PhysicalDeviceVulkan13Features,
+        vk::PhysicalDeviceTimelineSemaphoreFeatures>();
 
     auto& features10 = f10.features;
+
+    Log::Core::Assert(fTL.timelineSemaphore == vk::True, "No support for timeline semaphores");
 
     bool reuired_result = true, optional_result = true;
 
@@ -455,7 +458,9 @@ std::optional<PhysicalDevice::FeaturesChain> PhysicalDevice::Features(
 
     vk::PhysicalDeviceFeatures2 features2(features10);
 
-    FeaturesChain featuresChain = {features2, features11, features12, features13};
+    vk::PhysicalDeviceTimelineSemaphoreFeatures featuresTL(vk::True);
+
+    FeaturesChain featuresChain = {features2, features11, features12, features13, featuresTL};
 
     return featuresChain;
 }

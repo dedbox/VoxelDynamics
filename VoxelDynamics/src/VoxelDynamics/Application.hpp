@@ -2,6 +2,7 @@
 
 #include "VoxelDynamics/Core/Window.hpp"
 #include "VoxelDynamics/Renderer/Vulkan/Context.hpp"
+#include "VoxelDynamics/Renderer/Vulkan/SwapChain.hpp"
 
 namespace VoxelDynamics
 {
@@ -21,6 +22,7 @@ public:
             .height              = height,
             .preferredDeviceType = Vulkan::PhysicalDeviceType::Discrete,
             .deviceExtensions    = {},
+            .requestedColorSpace = Vulkan::ColorSpace::SrgbNonlinear,
         };
     };
 
