@@ -7,4 +7,5 @@
 #include <VoxelDynamics/Renderer/Vulkan/Device.hpp>
 #include <VoxelDynamics/Renderer/Vulkan/Instance.hpp>
 #include <VoxelDynamics/Renderer/Vulkan/PhysicalDevice.hpp>
+#include <VoxelDynamics/Renderer/Vulkan/Surface.hpp>
 #include <VoxelDynamics/Shader/ShaderCompiler.hpp>

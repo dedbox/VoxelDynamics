@@ -6,23 +6,19 @@ PhysicalDevice::PhysicalDevice(
     vk::raii::PhysicalDevice handle_,
     uint32_t graphicsQueueFamilyIndex_,
     uint32_t computeQueueFamilyIndex_,
-    vk::raii::SurfaceKHR surface_,
-    std::vector<vk::SurfaceFormatKHR> surfaceFormats_,
-    std::vector<vk::PresentModeKHR> surfacePresentModes_,
+    Surface surface_,
     const PhysicalDevice::FeaturesChain& features_)
     : handle(std::move(handle_))
     , graphicsQueueFamilyIndex(graphicsQueueFamilyIndex_)
     , computeQueueFamilyIndex(computeQueueFamilyIndex_)
     , surface(std::move(surface_))
-    , surfaceFormats(std::move(surfaceFormats_))
-    , surfacePresentModes(std::move(surfacePresentModes_))
     , features(features_)
 {
 }
 
 PhysicalDevice PhysicalDevice::Create(
     const vk::raii::Instance& instance,
-    vk::raii::SurfaceKHR surface,
+    vk::raii::SurfaceKHR vk_surface,
     const PhysicalDeviceType preferredType,
     const std::vector<const char*>& extraExtensions)
 {
@@ -97,13 +93,13 @@ PhysicalDevice PhysicalDevice::Create(
                 continue;
             }
 
-            const auto queueFamilyIndices = findQueueFamilyIndices(physicalDevice, surface);
+            const auto queueFamilyIndices = findQueueFamilyIndices(physicalDevice, vk_surface);
             if (!queueFamilyIndices)
                 continue;
 
             Log::Core::Trace("Checking device {}", i + 1);
 
-            const auto formats = physicalDevice.getSurfaceFormatsKHR(surface);
+            auto formats = physicalDevice.getSurfaceFormatsKHR(vk_surface);
             if (formats.empty())
             {
                 Log::Core::Trace("  reject: no compatible surface formats");
@@ -117,8 +113,8 @@ PhysicalDevice PhysicalDevice::Create(
                 continue;
             }
 
-            const auto presentModes = physicalDevice.getSurfacePresentModesKHR(surface);
-            const auto props        = physicalDevice.getProperties();
+            auto presentModes = physicalDevice.getSurfacePresentModesKHR(vk_surface);
+            const auto props  = physicalDevice.getProperties();
 
             Log::Core::Info(
                 "Picked physical device {}: {} ({}), API version {}.{}.{}",
@@ -130,16 +126,14 @@ PhysicalDevice PhysicalDevice::Create(
                 vk::apiVersionPatch(props.apiVersion));
             Log::Core::Info("  graphics queue family index: {}", queueFamilyIndices->first);
             Log::Core::Info("  compute queue family index: {}", queueFamilyIndices->second);
-            Log::Core::Info("  formats: {}", SurfaceFormatNames(formats));
-            Log::Core::Info("  present modes: {}", SufacePresentModeNames(presentModes));
+            Log::Core::Info("  formats: {}", Surface::FormatNames(formats));
+            Log::Core::Info("  present modes: {}", Surface::PresentModeNames(presentModes));
 
             return PhysicalDevice(
                 std::move(physicalDevice),
                 queueFamilyIndices->first,
                 queueFamilyIndices->second,
-                std::move(surface),
-                formats,
-                presentModes,
+                Surface(std::move(vk_surface), std::move(formats), std::move(presentModes)),
                 *features);
         }
 
@@ -464,25 +458,6 @@ std::optional<PhysicalDevice::FeaturesChain> PhysicalDevice::Features(
     FeaturesChain featuresChain = {features2, features11, features12, features13};
 
     return featuresChain;
-}
-
-std::string PhysicalDevice::SurfaceFormatNames(const std::vector<vk::SurfaceFormatKHR>& formats)
-{
-    const auto formatName = [](const vk::SurfaceFormatKHR& format) {
-        return vk::to_string(format.format) + "+" + vk::to_string(format.colorSpace);
-    };
-
-    return formats | std::ranges::views::transform(formatName) |
-           std::ranges::views::join_with(std::string_view(", ")) | std::ranges::to<std::string>();
-}
-
-std::string PhysicalDevice::SufacePresentModeNames(
-    const std::vector<vk::PresentModeKHR>& presentModes)
-{
-    const auto modeName = [](const vk::PresentModeKHR& mode) { return vk::to_string(mode); };
-
-    return presentModes | std::ranges::views::transform(modeName) |
-           std::ranges::views::join_with(std::string_view(", ")) | std::ranges::to<std::string>();
 }
 
 } // namespace VoxelDynamics::Vulkan

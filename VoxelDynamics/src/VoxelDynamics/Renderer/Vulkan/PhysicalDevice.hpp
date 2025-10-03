@@ -2,6 +2,8 @@
 
 #include "vulkan/vulkan_raii.hpp"
 
+#include "VoxelDynamics/Renderer/Vulkan/Surface.hpp"
+
 namespace VoxelDynamics::Vulkan
 {
 
@@ -30,14 +32,12 @@ public:
     vk::raii::PhysicalDevice handle;
     uint32_t graphicsQueueFamilyIndex;
     uint32_t computeQueueFamilyIndex;
-    vk::raii::SurfaceKHR surface;
-    std::vector<vk::SurfaceFormatKHR> surfaceFormats;
-    std::vector<vk::PresentModeKHR> surfacePresentModes;
+    Surface surface;
     FeaturesChain features;
 
     static PhysicalDevice Create(
         const vk::raii::Instance& instance,
-        vk::raii::SurfaceKHR surface,
+        vk::raii::SurfaceKHR vk_surface,
         const PhysicalDeviceType preferredType,
         const std::vector<const char*>& extraExtensions);
 
@@ -50,9 +50,7 @@ private:
         vk::raii::PhysicalDevice handle,
         uint32_t graphicsQueueFamilyIndex,
         uint32_t computeQueueFamilyIndex,
-        vk::raii::SurfaceKHR surface,
-        std::vector<vk::SurfaceFormatKHR> surfaceFormats,
-        std::vector<vk::PresentModeKHR> surfacePresentModes,
+        Surface surface,
         const FeaturesChain& features);
 
     static bool CheckExtensions(
@@ -62,9 +60,6 @@ private:
         const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::SurfaceKHR& surface);
 
     static std::optional<FeaturesChain> Features(const vk::raii::PhysicalDevice& physicalDevice);
-
-    static std::string SurfaceFormatNames(const std::vector<vk::SurfaceFormatKHR>& formats);
-    static std::string SufacePresentModeNames(const std::vector<vk::PresentModeKHR>& presentModes);
 };
 
 } // namespace VoxelDynamics::Vulkan

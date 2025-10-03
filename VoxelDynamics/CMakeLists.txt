@@ -20,6 +20,7 @@ add_library(
   src/VoxelDynamics/Renderer/Vulkan/Device.cpp
   src/VoxelDynamics/Renderer/Vulkan/Instance.cpp
   src/VoxelDynamics/Renderer/Vulkan/PhysicalDevice.cpp
+  src/VoxelDynamics/Renderer/Vulkan/Surface.cpp
   src/VoxelDynamics/Shader/ShaderCompiler.cpp)
 
 option(ENABLE_LOGGING "Enable application logging" OFF)
