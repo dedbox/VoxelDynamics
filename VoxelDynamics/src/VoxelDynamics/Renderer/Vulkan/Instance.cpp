@@ -7,7 +7,7 @@ namespace VoxelDynamics::Vulkan
 
 Instance::Instance(
     const vk::raii::Context& context, const std::string& appName, const uint32_t appVersion)
-    : _instance(CreateInstance(context, appName, appVersion))
+    : _vk(CreateInstance(context, appName, appVersion))
 {
 }
 

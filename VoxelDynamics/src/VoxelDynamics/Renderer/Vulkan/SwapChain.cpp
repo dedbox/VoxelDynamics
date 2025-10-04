@@ -7,12 +7,12 @@ namespace VoxelDynamics::Vulkan
 {
 
 SwapChain::SwapChain(
-    vk::raii::SwapchainKHR handle_,
+    vk::raii::SwapchainKHR swapChain,
     vk::SurfaceFormatKHR surfaceFormat_,
     ColorSpace colorSpace_,
     std::vector<Image> images_,
     std::vector<vk::Semaphore> acquireSemaphores_)
-    : handle(std::move(handle_))
+    : vk_(std::move(swapChain))
     , surfaceFormat(surfaceFormat_)
     , colorSpace(colorSpace_)
     , images(std::move(images_))
@@ -27,12 +27,11 @@ SwapChain SwapChain::Create(
     uint32_t height,
     ColorSpace requestedColorSpace)
 {
-    Log::Core::Assert(physicalDevice.surface.handle != VK_NULL_HANDLE, "OS surface is empty");
+    Log::Core::Assert(*physicalDevice.surface != VK_NULL_HANDLE, "OS surface is empty");
 
-    const auto caps =
-        physicalDevice.handle.getSurfaceCapabilitiesKHR(physicalDevice.surface.handle);
+    const auto caps          = physicalDevice->getSurfaceCapabilitiesKHR(*physicalDevice.surface);
     const auto surfaceFormat = ChooseSurfaceFormat(physicalDevice, requestedColorSpace);
-    const auto props         = physicalDevice.handle.getFormatProperties(surfaceFormat.format);
+    const auto props         = physicalDevice->getFormatProperties(surfaceFormat.format);
     const auto modes         = physicalDevice.surface.presentModes;
 
     const uint32_t imageCount = [&]() {
@@ -65,7 +64,7 @@ SwapChain SwapChain::Create(
 
     const vk::SwapchainCreateInfoKHR createInfo(
         {},
-        physicalDevice.surface.handle,
+        *physicalDevice.surface,
         imageCount,
         surfaceFormat.format,
         surfaceFormat.colorSpace,
@@ -85,7 +84,7 @@ SwapChain SwapChain::Create(
             : vk::CompositeAlphaFlagBitsKHR::eInherit,
         presentMode);
 
-    vk::raii::SwapchainKHR swapChain = device.handle.createSwapchainKHR(createInfo);
+    vk::raii::SwapchainKHR swapChain = device->createSwapchainKHR(createInfo);
 
     const auto vk_images = swapChain.getImages();
 
@@ -112,12 +111,12 @@ SwapChain SwapChain::Create(
                 vk::ImageAspectFlagBits::eColor, 0, vk::RemainingMipLevels, 0, 1));
 
         images.emplace_back(
-            image, ImageType::SwapChain, device.handle.createImageView(imageViewCreateInfo));
+            image, ImageType::SwapChain, device->createImageView(imageViewCreateInfo));
 
         vk::SemaphoreCreateFlags flags = {};
         vk::SemaphoreCreateInfo semaphoreCreateInfo(flags);
 
-        acquireSemaphores.push_back(device.handle.createSemaphore(semaphoreCreateInfo));
+        acquireSemaphores.push_back(device->createSemaphore(semaphoreCreateInfo));
     }
 
     Log::Core::Info("Created swap chain:");
@@ -138,7 +137,7 @@ SwapChain SwapChain::Create(
 void SwapChain::destroy()
 {
     images.clear();
-    auto sc = std::make_unique<vk::raii::SwapchainKHR>(std::move(handle));
+    auto sc = std::make_unique<vk::raii::SwapchainKHR>(std::move(vk_));
 }
 
 vk::SurfaceFormatKHR SwapChain::ChooseSurfaceFormat(

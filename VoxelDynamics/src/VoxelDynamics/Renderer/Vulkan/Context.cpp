@@ -26,7 +26,7 @@ Context::Context(const Window& window, const CreateInfo& createInfo)
 
 void Context::resizeSwapChain(uint32_t width, uint32_t height)
 {
-    _device.handle.waitIdle();
+    _device->waitIdle();
     _swapChain.destroy();
     _swapChain = SwapChain::Create(_physicalDevice, _device, width, height, _requestedColorSpace);
 }
@@ -42,7 +42,7 @@ vk::raii::Semaphore Context::createTimelineSemaphore() const
         createInfo, typeCreateInfo);
 
     vk::raii::Semaphore semaphore =
-        _device.handle.createSemaphore(createInfoChain.get<vk::SemaphoreCreateInfo>());
+        _device->createSemaphore(createInfoChain.get<vk::SemaphoreCreateInfo>());
     _device.setDebugName(
         vk::ObjectType::eSemaphore,
         reinterpret_cast<uint64_t>(&**semaphore), // NOLINT

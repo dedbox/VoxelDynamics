@@ -23,7 +23,7 @@ inline vk::ColorSpaceKHR to_vk(ColorSpace colorSpace)
 class SwapChain
 {
 public:
-    vk::raii::SwapchainKHR handle;
+    vk::raii::SwapchainKHR vk_;
     vk::SurfaceFormatKHR surfaceFormat;
     ColorSpace colorSpace;
     std::vector<Image> images;
@@ -46,9 +46,15 @@ public:
     SwapChain(const SwapChain&)            = delete;
     SwapChain& operator=(const SwapChain&) = delete;
 
+    vk::raii::SwapchainKHR& operator*() { return vk_; }
+    const vk::raii::SwapchainKHR& operator*() const { return vk_; }
+
+    vk::raii::SwapchainKHR* operator->() { return &vk_; }
+    const vk::raii::SwapchainKHR* operator->() const { return &vk_; }
+
 private:
     SwapChain(
-        vk::raii::SwapchainKHR handle,
+        vk::raii::SwapchainKHR swapChain,
         vk::SurfaceFormatKHR surfaceFormat,
         ColorSpace colorSpace,
         std::vector<Image> images,

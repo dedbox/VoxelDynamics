@@ -30,7 +30,7 @@ public:
         vk::PhysicalDeviceVulkan13Features,
         vk::PhysicalDeviceTimelineSemaphoreFeatures>;
 
-    vk::raii::PhysicalDevice handle;
+    vk::raii::PhysicalDevice vk_;
     uint32_t graphicsQueueFamilyIndex;
     uint32_t computeQueueFamilyIndex;
     Surface surface;
@@ -44,11 +44,15 @@ public:
 
     static std::vector<const char*> Extensions(const std::vector<const char*>& extraExtensions);
 
-    const vk::raii::PhysicalDevice& operator*() const { return handle; }
+    vk::raii::PhysicalDevice& operator*() { return vk_; }
+    const vk::raii::PhysicalDevice& operator*() const { return vk_; }
+
+    vk::raii::PhysicalDevice* operator->() { return &vk_; }
+    const vk::raii::PhysicalDevice* operator->() const { return &vk_; }
 
 private:
     PhysicalDevice(
-        vk::raii::PhysicalDevice handle,
+        vk::raii::PhysicalDevice physicalDevice,
         uint32_t graphicsQueueFamilyIndex,
         uint32_t computeQueueFamilyIndex,
         Surface surface,

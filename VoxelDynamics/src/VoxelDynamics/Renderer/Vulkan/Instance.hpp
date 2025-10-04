@@ -11,10 +11,14 @@ public:
     Instance(
         const vk::raii::Context& context, const std::string& appName, const uint32_t appVersion);
 
-    vk::raii::Instance& operator*() { return _instance; }
+    vk::raii::Instance& operator*() { return _vk; }
+    const vk::raii::Instance& operator*() const { return _vk; }
+
+    vk::raii::Instance* operator->() { return &_vk; }
+    const vk::raii::Instance* operator->() const { return &_vk; }
 
 private:
-    vk::raii::Instance _instance;
+    vk::raii::Instance _vk;
 
     static vk::raii::Instance CreateInstance(
         const vk::raii::Context& context, const std::string& appName, const uint32_t appVersion);

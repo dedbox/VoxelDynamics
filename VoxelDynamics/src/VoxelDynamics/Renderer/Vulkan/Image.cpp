@@ -3,8 +3,8 @@
 namespace VoxelDynamics::Vulkan
 {
 
-Image::Image(vk::Image handle_, ImageType type_, vk::ImageView view_)
-    : handle(handle_)
+Image::Image(vk::Image image, ImageType type_, vk::ImageView view_)
+    : vk_(image)
     , type(type_)
     , view(view_)
 {

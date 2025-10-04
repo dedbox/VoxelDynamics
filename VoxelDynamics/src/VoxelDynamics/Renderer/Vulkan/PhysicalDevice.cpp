@@ -3,12 +3,12 @@
 namespace VoxelDynamics::Vulkan
 {
 PhysicalDevice::PhysicalDevice(
-    vk::raii::PhysicalDevice handle_,
+    vk::raii::PhysicalDevice physcalDevice,
     uint32_t graphicsQueueFamilyIndex_,
     uint32_t computeQueueFamilyIndex_,
     Surface surface_,
     const PhysicalDevice::FeaturesChain& features_)
-    : handle(std::move(handle_))
+    : vk_(std::move(physcalDevice))
     , graphicsQueueFamilyIndex(graphicsQueueFamilyIndex_)
     , computeQueueFamilyIndex(computeQueueFamilyIndex_)
     , surface(std::move(surface_))

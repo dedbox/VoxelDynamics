@@ -13,11 +13,15 @@ public:
     static Device Create(
         const PhysicalDevice& physicalDevice, const std::vector<const char*>& extraExtensions);
 
-    vk::raii::Device handle;
+    vk::raii::Device vk_;
     vk::raii::Queue graphicsQueue;
     vk::raii::Queue computeQueue;
 
-    const vk::raii::Device& operator*() const { return handle; }
+    vk::raii::Device& operator*() { return vk_; }
+    const vk::raii::Device& operator*() const { return vk_; }
+
+    vk::raii::Device* operator->() { return &vk_; }
+    const vk::raii::Device* operator->() const { return &vk_; }
 
     void setDebugName(vk::ObjectType type, uint64_t handle, const std::string& name) const;
 
