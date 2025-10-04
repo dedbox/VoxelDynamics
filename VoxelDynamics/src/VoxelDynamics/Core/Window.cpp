@@ -46,6 +46,13 @@ std::pair<uint32_t, uint32_t> Window::getSize() const
     return std::make_pair(width, height);
 }
 
+std::pair<uint32_t, uint32_t> Window::getPixelSize() const
+{
+    int width{}, height{};
+    glfwGetFramebufferSize(_window, &width, &height);
+    return std::make_pair(width, height);
+}
+
 VkSurfaceKHR Window::createSurface(const VkInstance& instance) const
 {
     VkSurfaceKHR surface{VK_NULL_HANDLE};

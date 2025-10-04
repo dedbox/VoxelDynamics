@@ -21,6 +21,7 @@ public:
     Window& operator=(Window&&) = delete;
 
     std::pair<uint32_t, uint32_t> getSize() const;
+    std::pair<uint32_t, uint32_t> getPixelSize() const;
 
     VkSurfaceKHR createSurface(const VkInstance& instance) const;
 
