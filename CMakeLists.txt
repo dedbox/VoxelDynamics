@@ -19,26 +19,15 @@ if(NOT Vulkan_FOUND)
   message(FATAL_ERROR "Vulkan not found.")
 endif()
 
-# LVK --------------------------------------------------------------------------
+# GLFW -------------------------------------------------------------------------
 
 FetchContent_Declare(
-  lightweightvk
-  GIT_REPOSITORY https://github.com/corporateshark/lightweightvk.git
-  GIT_SHALLOW ON)
+  GLFW
+  GIT_REPOSITORY https://github.com/glfw/glfw.git
+  GIT_TAG 3.4
+  GIT_SHALLOW YES)
 
-set(GLFW_BUILD_DOCS
-    OFF
-    CACHE BOOL "" FORCE)
-
-set(GLFW_BUILD_TESTS
-    OFF
-    CACHE BOOL "" FORCE)
-
-set(GLFW_BUILD_EXAMPLES
-    OFF
-    CACHE BOOL "" FORCE)
-
-FetchContent_MakeAvailable(lightweightvk)
+FetchContent_MakeAvailable(GLFW)
 
 # spdlog -----------------------------------------------------------------------
 

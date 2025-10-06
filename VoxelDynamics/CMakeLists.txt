@@ -4,7 +4,7 @@ project(VoxelDynamics)
 add_library(VoxelDynamics STATIC src/VoxelDynamics/Core/Application.cpp
                                  src/VoxelDynamics/Core/Log.cpp)
 
-target_link_libraries(VoxelDynamics PUBLIC LVKLibrary spdlog::spdlog)
+target_link_libraries(VoxelDynamics PUBLIC Vulkan::Vulkan glfw spdlog::spdlog)
 
 target_include_directories(VoxelDynamics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 

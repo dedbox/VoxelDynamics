@@ -1,20 +1,19 @@
 #include "VoxelDynamics/Core/Application.hpp"
 
-#include "LVK.h"
 #include "VoxelDynamics/Config.hpp"
-#include "lvk/vulkan/VulkanUtils.h"
 
 namespace VoxelDynamics
 {
 
 Application::Application(const CreateInfo& createInfo)
     : _window(CreateWindow(createInfo))
-    , _context(lvk::createVulkanContextWithSwapchain(_window, 0, 0, {}))
 {
     glfwSetKeyCallback(_window, [](GLFWwindow* window, int key, int, int action, int) {
         if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
             glfwSetWindowShouldClose(window, GLFW_TRUE);
     });
+
+    glfwShowWindow(_window);
 }
 
 template <class... Ts>
@@ -50,6 +49,7 @@ GLFWwindow* Application::CreateWindow(const CreateInfo& createInfo)
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint(GLFW_RESIZABLE, createInfo.resizable ? GLFW_TRUE : GLFW_FALSE);
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 
     GLFWwindow* window = glfwCreateWindow(
         static_cast<int>(createInfo.width),
@@ -105,19 +105,6 @@ void Application::run() const
         glfwGetFramebufferSize(_window, &width, &height);
         if (!(width && height))
             continue;
-
-        lvk::ICommandBuffer& cmd = _context->acquireCommandBuffer();
-        lvk::TextureHandle image = _context->getCurrentSwapchainTexture();
-
-        vk::ClearValue clearColor({0.0F, 0.0F, 0.0F, 1.0F});
-        vk::RenderingAttachmentInfo colorAttachmentInfo;
-        colorAttachmentInfo.loadOp     = vk::AttachmentLoadOp::eClear;
-        colorAttachmentInfo.clearValue = clearColor;
-
-        vk::RenderingInfo renderInfo;
-        renderInfo.setColorAttachments(colorAttachmentInfo);
-
-        _context->submit(cmd, image);
     }
 }
 

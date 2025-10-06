@@ -1,7 +1,6 @@
 #pragma once
 
 #include "GLFW/glfw3.h"
-#include "lvk/LVK.h"
 
 namespace VoxelDynamics
 {
@@ -60,7 +59,6 @@ public:
 
 private:
     GLFWwindow* _window;
-    std::unique_ptr<lvk::IContext> _context;
 
     static GLFWwindow* CreateWindow(const CreateInfo& createInfo);
 };
