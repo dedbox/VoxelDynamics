@@ -1,3 +1,3 @@
 #pragma once
 
-#include <VoxelDynamics/hello.hpp>
+#include <VoxelDynamics/Core/Application.hpp>
