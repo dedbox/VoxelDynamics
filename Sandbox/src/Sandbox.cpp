@@ -11,11 +11,7 @@ int main()
         .logLevel  = VoxelDynamics::Log::Level::Trace,
     };
 
-    const auto app = VoxelDynamics::Application(appInfo);
-
-    VoxelDynamics::Log::Trace("Hello, logs!");
-
-    app.run();
+    VoxelDynamics::Application(appInfo).run();
 
     return 0;
 }

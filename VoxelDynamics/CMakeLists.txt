@@ -4,15 +4,9 @@ project(VoxelDynamics)
 add_library(VoxelDynamics STATIC src/VoxelDynamics/Core/Application.cpp
                                  src/VoxelDynamics/Core/Log.cpp)
 
-target_link_libraries(VoxelDynamics PRIVATE LVKLibrary spdlog::spdlog)
+target_link_libraries(VoxelDynamics PUBLIC LVKLibrary spdlog::spdlog)
 
-target_include_directories(VoxelDynamics INTERFACE ${Vulkan_INCLUDE_DIRS}
-                                                   ${spdlog_SOURCE_DIR}/include)
-
-target_include_directories(
-  VoxelDynamics
-  PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src
-         ${lightweightvk_SOURCE_DIR}/third-party/deps/src/glfw/include)
+target_include_directories(VoxelDynamics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # Compile-time Options #########################################################
 

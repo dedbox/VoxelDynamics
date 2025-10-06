@@ -1,12 +1,15 @@
 #include "VoxelDynamics/Core/Application.hpp"
+
+#include "LVK.h"
 #include "VoxelDynamics/Config.hpp"
-#include <vulkan/vulkan.hpp>
+#include "lvk/vulkan/VulkanUtils.h"
 
 namespace VoxelDynamics
 {
 
 Application::Application(const CreateInfo& createInfo)
     : _window(CreateWindow(createInfo))
+    , _context(lvk::createVulkanContextWithSwapchain(_window, 0, 0, {}))
 {
     glfwSetKeyCallback(_window, [](GLFWwindow* window, int key, int, int action, int) {
         if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
@@ -88,20 +91,34 @@ GLFWwindow* Application::CreateWindow(const CreateInfo& createInfo)
 Application::~Application()
 {
     Log::Core::Info("Terminating application");
-
     glfwDestroyWindow(_window);
     glfwTerminate();
 }
 
 void Application::run() const
 {
-    while (isAlive())
+    int width = 0, height = 0;
+    while (!glfwWindowShouldClose(_window))
+    {
         glfwPollEvents();
-}
 
-bool Application::isAlive() const
-{
-    return !glfwWindowShouldClose(_window);
+        glfwGetFramebufferSize(_window, &width, &height);
+        if (!(width && height))
+            continue;
+
+        lvk::ICommandBuffer& cmd = _context->acquireCommandBuffer();
+        lvk::TextureHandle image = _context->getCurrentSwapchainTexture();
+
+        vk::ClearValue clearColor({0.0F, 0.0F, 0.0F, 1.0F});
+        vk::RenderingAttachmentInfo colorAttachmentInfo;
+        colorAttachmentInfo.loadOp     = vk::AttachmentLoadOp::eClear;
+        colorAttachmentInfo.clearValue = clearColor;
+
+        vk::RenderingInfo renderInfo;
+        renderInfo.setColorAttachments(colorAttachmentInfo);
+
+        _context->submit(cmd, image);
+    }
 }
 
 } // namespace VoxelDynamics

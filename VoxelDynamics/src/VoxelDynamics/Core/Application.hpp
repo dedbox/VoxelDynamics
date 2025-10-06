@@ -1,7 +1,7 @@
 #pragma once
 
 #include "GLFW/glfw3.h"
-#include "vulkan/vulkan.hpp"
+#include "lvk/LVK.h"
 
 namespace VoxelDynamics
 {
@@ -33,7 +33,7 @@ public:
     struct CreateInfo
     {
         std::string name;
-        uint64_t version          = vk::makeVersion(1, 0, 0);
+        uint64_t version          = Version(1, 0, 0);
         std::string title         = name;
         uint32_t width            = 1280;
         uint32_t height           = 720;
@@ -60,10 +60,9 @@ public:
 
 private:
     GLFWwindow* _window;
+    std::unique_ptr<lvk::IContext> _context;
 
     static GLFWwindow* CreateWindow(const CreateInfo& createInfo);
-
-    bool isAlive() const;
 };
 
 } // namespace VoxelDynamics
