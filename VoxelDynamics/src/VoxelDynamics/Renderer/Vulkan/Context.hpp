@@ -32,6 +32,7 @@ private:
     {
         vk::raii::PhysicalDevice physicalDevice;
         uint32_t graphicsQueueFamilyIndex;
+        uint32_t presentQueueFamilyIndex;
         std::vector<vk::SurfaceFormatKHR> surfaceFormats;
         std::vector<vk::PresentModeKHR> presentModes;
         FeaturesChain features;
@@ -40,6 +41,21 @@ private:
         vk::raii::PhysicalDevice& operator*() { return physicalDevice; }
         const vk::raii::PhysicalDevice& operator*() const { return physicalDevice; }
     } _physicalDevice;
+
+    struct Device
+    {
+        vk::raii::Device device;
+        vk::raii::Queue graphicsQueue;
+        vk::raii::Queue presentQueue;
+
+        // dereference operator gives access to the underlying Vulkan object
+        vk::raii::Device& operator*() { return device; }
+        const vk::raii::Device& operator*() const { return device; }
+
+        // arrow operator gives access to members of the underlying Vulkan object
+        vk::raii::Device* operator->() { return &device; }
+        const vk::raii::Device* operator->() const { return &device; }
+    } _device;
 
     // Instance ////////////////////////////////////////////////////////////////////////////////////
 
@@ -76,6 +92,16 @@ private:
 
     static std::optional<FeaturesChain> CreateFeaturesChain(
         const vk::raii::PhysicalDevice& physicalDevice, const size_t i);
+
+    // Logical Device //////////////////////////////////////////////////////////////////////////////
+
+    Device createDevice() const;
+
+    void setDebugName(vk::ObjectType type, uint64_t handle, const std::string& name) const
+    {
+        _device->setDebugUtilsObjectNameEXT(
+            vk::DebugUtilsObjectNameInfoEXT(type, handle, name.c_str()));
+    }
 };
 
 } // namespace VoxelDynamics::Vulkan

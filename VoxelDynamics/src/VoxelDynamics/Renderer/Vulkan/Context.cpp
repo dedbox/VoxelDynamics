@@ -7,6 +7,7 @@ Context::Context(GLFWwindow* window, const CreateInfo& contextInfo)
     : _instance(createInstance(contextInfo))
     , _surface(createSurface(window))
     , _physicalDevice(pickPhysicalDevice(contextInfo.preferredDeviceType))
+    , _device(createDevice())
 {
 }
 
@@ -52,7 +53,7 @@ std::vector<const char*> Context::InstanceExtensions()
 {
     uint32_t count            = 0;
     const auto raw_extensions = glfwGetRequiredInstanceExtensions(&count);
-    std::vector<const char*> extensions(raw_extensions, raw_extensions + count); // NOLINT
+    std::vector<const char*> extensions(raw_extensions, raw_extensions + count);
     if (is_debugging_enabled)
         extensions.push_back(vk::EXTDebugUtilsExtensionName);
     return extensions;
@@ -197,6 +198,7 @@ Context::PhysicalDevice Context::pickPhysicalDevice(
         vk::PhysicalDeviceProperties properties;
         std::vector<std::string> availableExtensions;
         uint32_t graphicsQueueFamilyIndex;
+        uint32_t presentQueueFamilyIndex;
         std::vector<vk::SurfaceFormatKHR> surfaceFormats;
         std::vector<vk::PresentModeKHR> presentModes;
         FeaturesChain features;
@@ -263,20 +265,37 @@ Context::PhysicalDevice Context::pickPhysicalDevice(
             continue;
         }
 
-        // check for a graphics queue family
-        const auto graphicsQueueFamilyIndex = [&]() -> std::optional<uint32_t> {
-            for (const auto&& [index, family] :
+        // check for graphics and present queue families
+        const auto maybe_indices = [&]() -> std::optional<std::pair<uint32_t, uint32_t>> {
+            std::optional<uint32_t> maybe_graphics, maybe_present;
+            for (const auto&& [i, family] :
                  std::ranges::views::enumerate(physicalDevice.getQueueFamilyProperties()))
+            {
                 if (family.queueFlags & vk::QueueFlagBits::eGraphics)
-                    return index;
+                {
+                    if (physicalDevice.getSurfaceSupportKHR(i, *_surface))
+                        return std::make_pair(i, i);
+                    if (!maybe_graphics)
+                        maybe_graphics = i;
+                }
+                else if (!maybe_present && physicalDevice.getSurfaceSupportKHR(i, *_surface))
+                    maybe_present = i;
+            }
+
+            if (maybe_graphics && maybe_present)
+                return std::make_pair(*maybe_graphics, *maybe_present);
+
             return std::nullopt;
         }();
 
-        if (!graphicsQueueFamilyIndex)
+        if (!maybe_indices)
         {
-            Log::Core::Trace("Skipping device {}: graphics operations not supported", i + 1);
+            Log::Core::Trace(
+                "Skipping device {}: graphics / present operations not supported", i + 1);
             continue;
         }
+
+        const auto& [graphicsQueueFamilyIndex, presentQueueFamilyIndex] = *maybe_indices;
 
         // check for surface format compatibility
         auto formats = physicalDevice.getSurfaceFormatsKHR(_surface);
@@ -302,7 +321,8 @@ Context::PhysicalDevice Context::pickPhysicalDevice(
             physicalDevice,
             props,
             availableExtensions,
-            *graphicsQueueFamilyIndex,
+            graphicsQueueFamilyIndex,
+            presentQueueFamilyIndex,
             formats,
             physicalDevice.getSurfacePresentModesKHR(_surface),
             *features));
@@ -334,6 +354,7 @@ Context::PhysicalDevice Context::pickPhysicalDevice(
             return PhysicalDevice(
                 pd.physicalDevice,
                 pd.graphicsQueueFamilyIndex,
+                pd.presentQueueFamilyIndex,
                 pd.surfaceFormats,
                 pd.presentModes,
                 pd.features);
@@ -419,6 +440,53 @@ std::optional<Context::FeaturesChain> Context::CreateFeaturesChain(
         return FeaturesChain(want10, want13, wantEDS);
 
     return std::nullopt;
+}
+
+Context::Device Context::createDevice() const
+{
+    const float queuePriority = 1.0;
+
+    const auto queueCreateInfos = [&]() -> std::vector<vk::DeviceQueueCreateInfo> {
+        if (_physicalDevice.graphicsQueueFamilyIndex == _physicalDevice.presentQueueFamilyIndex)
+            return {
+                vk::DeviceQueueCreateInfo(
+                    {}, _physicalDevice.graphicsQueueFamilyIndex, 1, &queuePriority),
+            };
+        else
+            return {
+                vk::DeviceQueueCreateInfo(
+                    {}, _physicalDevice.graphicsQueueFamilyIndex, 1, &queuePriority),
+                vk::DeviceQueueCreateInfo(
+                    {}, _physicalDevice.presentQueueFamilyIndex, 1, &queuePriority),
+            };
+    }();
+
+    const auto extensions = DeviceExtensions();
+
+    const vk::DeviceCreateInfo createInfo(
+        {},
+        queueCreateInfos.size(),
+        queueCreateInfos.data(),
+        0,
+        nullptr,
+        extensions.size(),
+        extensions.data(),
+        &_physicalDevice.features.get<vk::PhysicalDeviceFeatures2>().features,
+        _physicalDevice.features.get<vk::PhysicalDeviceVulkan13Features>());
+
+    auto device        = vk::raii::Device(*_physicalDevice, createInfo);
+    auto graphicsQueue = vk::raii::Queue(device, _physicalDevice.graphicsQueueFamilyIndex, 0);
+    auto presentQueue  = vk::raii::Queue(device, _physicalDevice.presentQueueFamilyIndex, 0);
+
+    device.setDebugUtilsObjectNameEXT(
+        vk::DebugUtilsObjectNameInfoEXT(
+            vk::ObjectType::eDevice,
+            reinterpret_cast<uint64_t>(&**device),
+            "Vulkan::Context::Device"));
+
+    Log::Core::Info("Logical device created");
+
+    return Device(std::move(device), std::move(graphicsQueue), std::move(presentQueue));
 }
 
 } // namespace VoxelDynamics::Vulkan
