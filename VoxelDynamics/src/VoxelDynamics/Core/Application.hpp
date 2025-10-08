@@ -2,6 +2,8 @@
 
 #include "GLFW/glfw3.h"
 
+#include "VoxelDynamics/Renderer/Vulkan/Context.hpp"
+
 namespace VoxelDynamics
 {
 
@@ -31,9 +33,8 @@ class Application
 public:
     struct CreateInfo
     {
-        std::string name;
-        uint64_t version          = Version(1, 0, 0);
-        std::string title         = name;
+        Vulkan::Context::CreateInfo contextInfo;
+        std::string title         = contextInfo.appName;
         uint32_t width            = 1280;
         uint32_t height           = 720;
         WindowPlacement placement = DefaultWindowPlacement();
@@ -58,7 +59,9 @@ public:
     void run() const;
 
 private:
+    const std::string _appName;
     GLFWwindow* _window;
+    Vulkan::Context _context;
 
     static GLFWwindow* CreateWindow(const CreateInfo& createInfo);
 };

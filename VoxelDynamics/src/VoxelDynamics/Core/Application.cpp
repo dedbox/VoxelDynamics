@@ -1,12 +1,18 @@
 #include "VoxelDynamics/Core/Application.hpp"
 
-#include "VoxelDynamics/Config.hpp"
+template <class... Ts>
+struct overloaded : Ts...
+{
+    using Ts::operator()...;
+};
 
 namespace VoxelDynamics
 {
 
-Application::Application(const CreateInfo& createInfo)
-    : _window(CreateWindow(createInfo))
+Application::Application(const CreateInfo& appInfo)
+    : _appName(appInfo.contextInfo.appName)
+    , _window(CreateWindow(appInfo))
+    , _context(_window, appInfo.contextInfo)
 {
     glfwSetKeyCallback(_window, [](GLFWwindow* window, int key, int, int action, int) {
         if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
@@ -16,16 +22,30 @@ Application::Application(const CreateInfo& createInfo)
     glfwShowWindow(_window);
 }
 
-template <class... Ts>
-struct overloaded : Ts...
+Application::~Application()
 {
-    using Ts::operator()...;
-};
+    Log::Core::Info("Terminating {}", _appName);
+    glfwDestroyWindow(_window);
+    glfwTerminate();
+}
 
-GLFWwindow* Application::CreateWindow(const CreateInfo& createInfo)
+void Application::run() const
 {
-    Log::Init(createInfo.name);
-    Log::SetLevel(createInfo.logLevel);
+    int width = 0, height = 0;
+    while (!glfwWindowShouldClose(_window))
+    {
+        glfwPollEvents();
+
+        glfwGetFramebufferSize(_window, &width, &height);
+        if (!(width && height))
+            continue;
+    }
+}
+
+GLFWwindow* Application::CreateWindow(const CreateInfo& appInfo)
+{
+    Log::Init(appInfo.contextInfo.appName);
+    Log::SetLevel(appInfo.logLevel);
 
     Log::Core::Info(
         "{} {}.{}.{}",
@@ -35,26 +55,30 @@ GLFWwindow* Application::CreateWindow(const CreateInfo& createInfo)
         vk::versionPatch(EngineVersion));
 
     Log::Core::Info(
-        "Starting application {}, version {}.{}.{}",
-        createInfo.name,
-        vk::versionMajor(createInfo.version),
-        vk::versionMinor(createInfo.version),
-        vk::versionPatch(createInfo.version));
+        "Starting {}, version {}.{}.{}",
+        appInfo.contextInfo.appName,
+        vk::versionMajor(appInfo.contextInfo.appVersion),
+        vk::versionMinor(appInfo.contextInfo.appVersion),
+        vk::versionPatch(appInfo.contextInfo.appVersion));
 
     glfwSetErrorCallback([](int code, const char* description) {
         Log::Core::Error("GLFW Error ({}): {}", code, description);
     });
 
-    Log::Core::Assert(glfwInit() == GLFW_TRUE, "glfwInit() failed");
+    if (glfwInit() != GLFW_TRUE)
+        throw std::runtime_error("GLFW Error: initialzation failed");
 
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_RESIZABLE, createInfo.resizable ? GLFW_TRUE : GLFW_FALSE);
+    if (glfwVulkanSupported() == GLFW_FALSE)
+        throw std::runtime_error("GLFW Error: Vulkan is not supported");
+
     glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    glfwWindowHint(GLFW_RESIZABLE, appInfo.resizable ? GLFW_TRUE : GLFW_FALSE);
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
     GLFWwindow* window = glfwCreateWindow(
-        static_cast<int>(createInfo.width),
-        static_cast<int>(createInfo.height),
-        createInfo.title.c_str(),
+        static_cast<int>(appInfo.width),
+        static_cast<int>(appInfo.height),
+        appInfo.title.c_str(),
         nullptr,
         nullptr);
 
@@ -71,8 +95,8 @@ GLFWwindow* Application::CreateWindow(const CreateInfo& createInfo)
                 const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
 
                 //  calculate the position of the top-left corner
-                const uint32_t x = (mode->width - createInfo.width) >> 1U;
-                const uint32_t y = (mode->height - createInfo.height) >> 1U;
+                const uint32_t x = (mode->width - appInfo.width) >> 1U;
+                const uint32_t y = (mode->height - appInfo.height) >> 1U;
 
                 // apply the calculated position
                 glfwSetWindowPos(window, static_cast<int>(x), static_cast<int>(y));
@@ -83,29 +107,9 @@ GLFWwindow* Application::CreateWindow(const CreateInfo& createInfo)
                 glfwSetWindowPos(window, static_cast<int>(pos.x), static_cast<int>(pos.y));
             },
         },
-        createInfo.placement);
+        appInfo.placement);
 
     return window;
-}
-
-Application::~Application()
-{
-    Log::Core::Info("Terminating application");
-    glfwDestroyWindow(_window);
-    glfwTerminate();
-}
-
-void Application::run() const
-{
-    int width = 0, height = 0;
-    while (!glfwWindowShouldClose(_window))
-    {
-        glfwPollEvents();
-
-        glfwGetFramebufferSize(_window, &width, &height);
-        if (!(width && height))
-            continue;
-    }
 }
 
 } // namespace VoxelDynamics
