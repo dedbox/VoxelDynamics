@@ -447,18 +447,15 @@ Context::Device Context::createDevice() const
     const float queuePriority = 1.0;
 
     const auto queueCreateInfos = [&]() -> std::vector<vk::DeviceQueueCreateInfo> {
-        if (_physicalDevice.graphicsQueueFamilyIndex == _physicalDevice.presentQueueFamilyIndex)
-            return {
+        std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos = {
+            vk::DeviceQueueCreateInfo(
+                {}, _physicalDevice.graphicsQueueFamilyIndex, 1, &queuePriority),
+        };
+        if (_physicalDevice.graphicsQueueFamilyIndex != _physicalDevice.presentQueueFamilyIndex)
+            queueCreateInfos.push_back(
                 vk::DeviceQueueCreateInfo(
-                    {}, _physicalDevice.graphicsQueueFamilyIndex, 1, &queuePriority),
-            };
-        else
-            return {
-                vk::DeviceQueueCreateInfo(
-                    {}, _physicalDevice.graphicsQueueFamilyIndex, 1, &queuePriority),
-                vk::DeviceQueueCreateInfo(
-                    {}, _physicalDevice.presentQueueFamilyIndex, 1, &queuePriority),
-            };
+                    {}, _physicalDevice.presentQueueFamilyIndex, 1, &queuePriority));
+        return queueCreateInfos;
     }();
 
     const auto extensions = DeviceExtensions();
