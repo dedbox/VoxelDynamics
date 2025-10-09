@@ -8,8 +8,11 @@ Context::Context(GLFWwindow* window, const CreateInfo& contextInfo)
     , _surface(createSurface(window))
     , _physicalDevice(pickPhysicalDevice(contextInfo.preferredDeviceType))
     , _device(createDevice())
+    , _swapChain(createSwapChain(window))
 {
 }
+
+// Instance ////////////////////////////////////////////////////////////////////////////////////////
 
 vk::raii::Instance Context::createInstance(const CreateInfo& contextInfo) const
 {
@@ -155,6 +158,8 @@ constexpr vk::DebugUtilsMessengerCreateInfoEXT Context::DebugUtilsMessengerCreat
     return createInfo;
 }
 
+// Surface /////////////////////////////////////////////////////////////////////////////////////////
+
 vk::raii::SurfaceKHR Context::createSurface(GLFWwindow* window) const
 {
     VkSurfaceKHR surface = VK_NULL_HANDLE;
@@ -163,6 +168,8 @@ vk::raii::SurfaceKHR Context::createSurface(GLFWwindow* window) const
         throw std::runtime_error("GLFW Error: surface creation failed");
     return vk::raii::SurfaceKHR(_instance, surface);
 }
+
+// Physical Device /////////////////////////////////////////////////////////////////////////////////
 
 Context::PhysicalDevice Context::pickPhysicalDevice(
     const vk::PhysicalDeviceType& preferredType) const
@@ -388,13 +395,14 @@ bool Context::CheckDeviceExtensions(const std::vector<std::string>& available, c
     return true;
 }
 
+std::string Context::SurfaceFormatName(const vk::SurfaceFormatKHR& format)
+{
+    return vk::to_string(format.format) + "+" + vk::to_string(format.colorSpace);
+}
+
 std::string Context::SurfaceFormatNames(const std::vector<vk::SurfaceFormatKHR>& formats)
 {
-    const auto formatName = [](const vk::SurfaceFormatKHR& format) {
-        return vk::to_string(format.format) + "+" + vk::to_string(format.colorSpace);
-    };
-
-    return formats | std::ranges::views::transform(formatName) |
+    return formats | std::ranges::views::transform(SurfaceFormatName) |
            std::ranges::views::join_with(std::string_view(", ")) | std::ranges::to<std::string>();
 }
 
@@ -442,6 +450,8 @@ std::optional<Context::FeaturesChain> Context::CreateFeaturesChain(
     return std::nullopt;
 }
 
+// Logical Device //////////////////////////////////////////////////////////////////////////////////
+
 Context::Device Context::createDevice() const
 {
     const float queuePriority = 1.0;
@@ -477,13 +487,180 @@ Context::Device Context::createDevice() const
 
     device.setDebugUtilsObjectNameEXT(
         vk::DebugUtilsObjectNameInfoEXT(
-            vk::ObjectType::eDevice,
-            reinterpret_cast<uint64_t>(&**device),
-            "Vulkan::Context::Device"));
+            vk::ObjectType::eDevice, reinterpret_cast<uint64_t>(&**device), "Vulkan Device"));
 
     Log::Core::Info("Logical device created");
 
     return Device(std::move(device), std::move(graphicsQueue), std::move(presentQueue));
+}
+
+// Swap Chain //////////////////////////////////////////////////////////////////////////////////////
+
+Context::SwapChain Context::createSwapChain(GLFWwindow* window) const
+{
+    const auto caps = _physicalDevice->getSurfaceCapabilitiesKHR(_surface);
+
+    // determine swap chain image dimensions
+    const auto extent = [&]() -> vk::Extent2D {
+        if (caps.currentExtent.width != 0xFFFFFFFF)
+            return caps.currentExtent;
+
+        int width = 0, height = 0;
+        glfwGetFramebufferSize(window, &width, &height);
+
+        return {
+            std::clamp<uint32_t>(width, caps.minImageExtent.width, caps.minImageExtent.height),
+            std::clamp<uint32_t>(height, caps.minImageExtent.height, caps.minImageExtent.height),
+        };
+    }();
+
+    Log::Core::Trace("Surface extent: {}x{}", extent.width, extent.height);
+
+    // choose a surface format
+    const auto surfaceFormat = [&]() -> vk::SurfaceFormatKHR {
+        // check if device prefers BGR formats
+        const auto isNativeBgr = [&]() -> bool {
+            for (const auto format : _physicalDevice.surfaceFormats)
+            {
+                switch (format.format)
+                {
+                case vk::Format::eR8G8B8A8Unorm:
+                case vk::Format::eR8G8B8A8Srgb:
+                case vk::Format::eA2R10G10B10UnormPack32:
+                    return false;
+                case vk::Format::eB8G8R8A8Unorm:
+                case vk::Format::eB8G8R8A8Srgb:
+                case vk::Format::eA2B10G10R10UnormPack32:
+                    return true;
+                default:
+                    break;
+                }
+            }
+            return false;
+        }();
+
+        Log::Core::Trace("Native BGR support: {}", isNativeBgr ? "yes" : "no");
+
+        // for now, hard code client's preferred format and color space
+        const auto preferred = vk::SurfaceFormatKHR(
+            isNativeBgr ? vk::Format::eB8G8R8A8Unorm : vk::Format::eR8G8B8A8Unorm,
+            vk::ColorSpaceKHR::eSrgbNonlinear);
+
+        Log::Core::Trace(
+            "Preferred format: {} / {}",
+            vk::to_string(preferred.format),
+            vk::to_string(preferred.colorSpace));
+
+        Log::Core::Trace("Available formats:");
+        for (const auto& format : _physicalDevice.surfaceFormats)
+            Log::Core::Trace(
+                "  {} / {}", vk::to_string(format.format), vk::to_string(format.colorSpace));
+
+        // check if device supports client's preferred format and color space
+        for (const auto& format : _physicalDevice.surfaceFormats)
+            if (format.format == preferred.format && format.colorSpace == preferred.colorSpace)
+                return format;
+
+        Log::Core::Trace("Could not find the preferred swap chain format and color space");
+
+        // if not, check if device supports client's preferred format with any color space
+        for (const auto& format : _physicalDevice.surfaceFormats)
+            if (format.format == preferred.format)
+                return format;
+
+        Log::Core::Trace("Could not find the preferred swap chain format");
+
+        // Otherwise, default to the first format and color space
+        return _physicalDevice.surfaceFormats[0];
+    }();
+
+    Log::Core::Trace("Chosen format: {}", SurfaceFormatName(surfaceFormat));
+
+    // choose a present mode
+    const auto presentMode = [&]() -> vk::PresentModeKHR {
+        const auto& modes = _physicalDevice.presentModes;
+        if (std::ranges::find(modes, vk::PresentModeKHR::eMailbox) != modes.end())
+            return vk::PresentModeKHR::eMailbox;
+        if (std::ranges::find(modes, vk::PresentModeKHR::eImmediate) != modes.end())
+            return vk::PresentModeKHR::eImmediate;
+        if (std::ranges::find(modes, vk::PresentModeKHR::eFifo) != modes.end())
+            return vk::PresentModeKHR::eFifo;
+        throw std::runtime_error("Device offers no supported present modes");
+    }();
+
+    Log::Core::Trace("Present mode: {}", vk::to_string(presentMode));
+
+    // determine the number of swap chain images
+    const auto imageCount = caps.maxImageCount == 0
+                                ? caps.minImageCount + 1
+                                : std::min(caps.minImageCount + 1, caps.maxImageCount);
+
+    Log::Core::Trace("Number of swap chain images: {}", imageCount);
+
+    // determine unique queue family indices
+    const auto queueFamilyIndices = [&]() -> std::set<uint32_t> {
+        std::set<uint32_t> indices;
+        indices.emplace(_physicalDevice.graphicsQueueFamilyIndex);
+        indices.emplace(_physicalDevice.presentQueueFamilyIndex);
+        return indices;
+    }() | std::ranges::to<std::vector>();
+
+    // create the swap chain
+    const auto createInfo = vk::SwapchainCreateInfoKHR(
+        {},
+        _surface,
+        imageCount,
+        surfaceFormat.format,
+        surfaceFormat.colorSpace,
+        extent,
+        1,
+        vk::ImageUsageFlagBits::eColorAttachment,
+        vk::SharingMode::eExclusive,
+        queueFamilyIndices,
+        caps.supportedTransforms & vk::SurfaceTransformFlagBitsKHR::eIdentity
+            ? vk::SurfaceTransformFlagBitsKHR::eIdentity
+            : caps.currentTransform,
+        caps.supportedCompositeAlpha & vk::CompositeAlphaFlagBitsKHR::eOpaque
+            ? vk::CompositeAlphaFlagBitsKHR::eOpaque
+            : vk::CompositeAlphaFlagBitsKHR::eInherit,
+        presentMode);
+
+    auto swapChain = vk::raii::SwapchainKHR(*_device, createInfo);
+    auto images    = swapChain.getImages();
+
+    setDebugName(
+        vk::ObjectType::eSwapchainKHR,
+        reinterpret_cast<uint64_t>(&**swapChain),
+        "Vulkan SwapChain");
+
+    // create a view of each image in the swap chain
+    std::vector<vk::raii::ImageView> imageViews;
+    for (const auto& [i, image] : std::ranges::views::enumerate(images))
+    {
+        setDebugName(
+            vk::ObjectType::eImage,
+            reinterpret_cast<uint64_t>(&*image),
+            std::format("SwapChain Image {}", i));
+
+        const vk::ImageViewCreateInfo imageViewCreateInfo(
+            {},
+            image,
+            vk::ImageViewType::e2D,
+            surfaceFormat.format,
+            {},
+            vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
+
+        imageViews.emplace_back(*_device, imageViewCreateInfo);
+
+        setDebugName(
+            vk::ObjectType::eImageView,
+            reinterpret_cast<uint64_t>(&**imageViews.back()),
+            std::format("SwapChain Image View {}", i));
+    }
+
+    Log::Core::Info("Swap chain created");
+
+    return SwapChain(std::move(swapChain), images, surfaceFormat, extent, std::move(imageViews));
 }
 
 } // namespace VoxelDynamics::Vulkan

@@ -40,6 +40,10 @@ private:
         // dereference operator gives access to the underlying Vulkan object
         vk::raii::PhysicalDevice& operator*() { return physicalDevice; }
         const vk::raii::PhysicalDevice& operator*() const { return physicalDevice; }
+
+        // arrow operator gives access to members of the underlying Vulkan object
+        vk::raii::PhysicalDevice* operator->() { return &physicalDevice; }
+        const vk::raii::PhysicalDevice* operator->() const { return &physicalDevice; }
     } _physicalDevice;
 
     struct Device
@@ -56,6 +60,15 @@ private:
         vk::raii::Device* operator->() { return &device; }
         const vk::raii::Device* operator->() const { return &device; }
     } _device;
+
+    struct SwapChain
+    {
+        vk::raii::SwapchainKHR swapChain;
+        std::vector<vk::Image> images;
+        vk::SurfaceFormatKHR surfaceFormat;
+        vk::Extent2D extent;
+        std::vector<vk::raii::ImageView> imageViews;
+    } _swapChain;
 
     // Instance ////////////////////////////////////////////////////////////////////////////////////
 
@@ -87,6 +100,7 @@ private:
 
     static bool CheckDeviceExtensions(const std::vector<std::string>&, const size_t i);
 
+    static std::string SurfaceFormatName(const vk::SurfaceFormatKHR& format);
     static std::string SurfaceFormatNames(const std::vector<vk::SurfaceFormatKHR>& formats);
     static std::string PresentModeNames(const std::vector<vk::PresentModeKHR>& presentModes);
 
@@ -102,6 +116,10 @@ private:
         _device->setDebugUtilsObjectNameEXT(
             vk::DebugUtilsObjectNameInfoEXT(type, handle, name.c_str()));
     }
+
+    // Swap Chain //////////////////////////////////////////////////////////////////////////////////
+
+    SwapChain createSwapChain(GLFWwindow* window) const;
 };
 
 } // namespace VoxelDynamics::Vulkan
