@@ -22,6 +22,7 @@ private:
     using FeaturesChain = vk::StructureChain<
         vk::PhysicalDeviceFeatures2,
         vk::PhysicalDeviceVulkan13Features,
+        vk::PhysicalDeviceVulkan11Features,
         vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>;
 
     vk::raii::Context _context;
@@ -69,6 +70,12 @@ private:
         vk::Extent2D extent;
         std::vector<vk::raii::ImageView> imageViews;
     } _swapChain;
+
+    struct Pipeline
+    {
+        vk::raii::PipelineLayout layout;
+        vk::raii::Pipeline graphics;
+    } _pipeline;
 
     // Instance ////////////////////////////////////////////////////////////////////////////////////
 
@@ -120,6 +127,12 @@ private:
     // Swap Chain //////////////////////////////////////////////////////////////////////////////////
 
     SwapChain createSwapChain(GLFWwindow* window) const;
+
+    // Pipeline ////////////////////////////////////////////////////////////////////////////////////
+
+    Pipeline createPipeline() const;
+
+    [[nodiscard]] vk::raii::ShaderModule createShaderModule(const std::vector<char>& code) const;
 };
 
 } // namespace VoxelDynamics::Vulkan

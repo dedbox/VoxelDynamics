@@ -1,5 +1,7 @@
 #include "VoxelDynamics/Renderer/Vulkan/Context.hpp"
 
+#include "VoxelDynamics/Core/Util.hpp"
+
 namespace VoxelDynamics::Vulkan
 {
 
@@ -9,6 +11,7 @@ Context::Context(GLFWwindow* window, const CreateInfo& contextInfo)
     , _physicalDevice(pickPhysicalDevice(contextInfo.preferredDeviceType))
     , _device(createDevice())
     , _swapChain(createSwapChain(window))
+    , _pipeline(createPipeline())
 {
 }
 
@@ -417,14 +420,16 @@ std::string Context::PresentModeNames(const std::vector<vk::PresentModeKHR>& pre
 std::optional<Context::FeaturesChain> Context::CreateFeaturesChain(
     const vk::raii::PhysicalDevice& physicalDevice, const size_t i)
 {
-    const auto [h10, have13, haveEDS] = physicalDevice.getFeatures2<
+    const auto [h10, have13, have11, haveEDS] = physicalDevice.getFeatures2<
         vk::PhysicalDeviceFeatures2,
         vk::PhysicalDeviceVulkan13Features,
+        vk::PhysicalDeviceVulkan11Features,
         vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
     const auto have10 = h10.features;
 
     vk::PhysicalDeviceFeatures2 want10;
     vk::PhysicalDeviceVulkan13Features want13;
+    vk::PhysicalDeviceVulkan11Features want11;
     vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT wantEDS;
 
     bool hasAllRequired = true;
@@ -439,13 +444,15 @@ std::optional<Context::FeaturesChain> Context::CreateFeaturesChain(
         }
     };
 
+    require(have11.shaderDrawParameters, want11.shaderDrawParameters, "shaderDrawParameters (1.1)");
+
     require(have13.synchronization2, want13.synchronization2, "synchronization2 (1.3)");
     require(have13.dynamicRendering, want13.dynamicRendering, "dynamicRendering (1.3)");
     require(
         haveEDS.extendedDynamicState, wantEDS.extendedDynamicState, "extendedDynamicState (EDS)");
 
     if (hasAllRequired)
-        return FeaturesChain(want10, want13, wantEDS);
+        return FeaturesChain(want10, want13, want11, wantEDS);
 
     return std::nullopt;
 }
@@ -661,6 +668,138 @@ Context::SwapChain Context::createSwapChain(GLFWwindow* window) const
     Log::Core::Info("Swap chain created");
 
     return SwapChain(std::move(swapChain), images, surfaceFormat, extent, std::move(imageViews));
+}
+
+// Pipeline ////////////////////////////////////////////////////////////////////////////////////////
+
+Context::Pipeline Context::createPipeline() const
+{
+    // create shader module
+    const auto shaderModule = createShaderModule(readFile("shaders/slang.slang.spv"));
+
+    // define programmable shader stages
+    std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages = {
+        // vertex shader
+        vk::PipelineShaderStageCreateInfo(
+            {}, vk::ShaderStageFlagBits::eVertex, shaderModule, "vertMain"),
+        // fragment shader
+        vk::PipelineShaderStageCreateInfo(
+            {}, vk::ShaderStageFlagBits::eFragment, shaderModule, "fragMain"),
+    };
+
+    // describe vertex data format
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+
+    // set drawing primitive type
+    vk::PipelineInputAssemblyStateCreateInfo inputAssembly(
+        {}, vk::PrimitiveTopology::eTriangleList);
+
+    // declare rendering viewports and scissors
+    vk::PipelineViewportStateCreateInfo viewportState(
+        {},
+        1,   // viewport count
+        {},  // viewports
+        1,   // scissor count
+        {}); // scissors
+
+    // configure the rasterizer
+    vk::PipelineRasterizationStateCreateInfo rasterizer(
+        {},
+        vk::False,                   // depth clamp enable
+        vk::False,                   // discard enable
+        vk::PolygonMode::eFill,      // polygon mmode
+        vk::CullModeFlagBits::eBack, // coll mode
+        vk::FrontFace::eClockwise,   // front face
+        vk::False,                   // depth bias enable
+        {},                          // depth bias constant factor
+        {},                          // depth bias clamp
+        1.0F,                        // depth bias slope factor
+        1.0F);                       // line width
+
+    // configure multisampling
+    vk::PipelineMultisampleStateCreateInfo multisampling(
+        {},
+        vk::SampleCountFlagBits::e1, // rasterization samples
+        vk::False);                  // sample shading enable
+
+    // configure color blending
+    vk::PipelineColorBlendAttachmentState colorBlendAttachment(
+        vk::False,                       // blend enable
+        {},                              // source color blend factor
+        {},                              // destination color blend factor
+        {},                              // color blend operation
+        {},                              // source alpha blend factor
+        {},                              // destination alpha blend factor
+        {},                              // alpha blend operation
+        vk::ColorComponentFlagBits::eR | // color write mask
+            vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB |
+            vk::ColorComponentFlagBits::eA);
+
+    vk::PipelineColorBlendStateCreateInfo colorBlending(
+        {},
+        vk::False,              // logical operation enable
+        vk::LogicOp::eCopy,     // logical operation
+        1,                      // attachment count
+        &colorBlendAttachment); // attachments
+
+    // declare dynamic states
+    std::vector<vk::DynamicState> dynamicStates = {
+        vk::DynamicState::eViewport,
+        vk::DynamicState::eScissor,
+    };
+
+    vk::PipelineDynamicStateCreateInfo dynamicState({}, dynamicStates.size(), dynamicStates.data());
+
+    // define pipeline layout
+    vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
+        {},
+        0,   // set layout count
+        {},  // set layouts
+        0,   // push counstant range count
+        {}); // push constant ranges
+
+    vk::raii::PipelineLayout pipelineLayout(*_device, pipelineLayoutInfo);
+
+    vk::PipelineRenderingCreateInfo pipelineRenderingInfo(
+        {},                                // view mask
+        1,                                 // color attachment count
+        &_swapChain.surfaceFormat.format); // color attachment formats
+
+    // create the graphics pipeline
+    vk::GraphicsPipelineCreateInfo pipelineInfo(
+        {},
+        shaderStages.size(),     // stage count
+        shaderStages.data(),     // stages
+        &vertexInputInfo,        // vertex input state
+        &inputAssembly,          // input assembly state
+        {},                      // tesselation state
+        &viewportState,          // viewport state
+        &rasterizer,             // rasterization state
+        &multisampling,          // multisample state
+        nullptr,                 // depth stencil state
+        &colorBlending,          // color blend state
+        &dynamicState,           // dynamic state
+        pipelineLayout,          // layout
+        nullptr,                 // render pass
+        {},                      // subpass
+        {},                      // base pipeline handle
+        {},                      // base pipeline index
+        &pipelineRenderingInfo); // pNext
+
+    vk::raii::Pipeline graphicsPipeline(*_device, nullptr, pipelineInfo);
+
+    Log::Core::Info("Shader pipeline created");
+
+    return Pipeline(std::move(pipelineLayout), std::move(graphicsPipeline));
+}
+
+[[nodiscard]] vk::raii::ShaderModule Context::createShaderModule(
+    const std::vector<char>& code) const
+{
+    return vk::raii::ShaderModule(
+        *_device,
+        vk::ShaderModuleCreateInfo(
+            {}, code.size() * sizeof(char), reinterpret_cast<const uint32_t*>(code.data())));
 }
 
 } // namespace VoxelDynamics::Vulkan

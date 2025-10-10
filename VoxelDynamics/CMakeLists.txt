@@ -4,7 +4,7 @@ project(VoxelDynamics)
 add_library(
   VoxelDynamics STATIC
   src/VoxelDynamics/Core/Application.cpp src/VoxelDynamics/Core/Log.cpp
-  src/VoxelDynamics/Renderer/Vulkan/Context.cpp)
+  src/VoxelDynamics/Core/Util.cpp src/VoxelDynamics/Renderer/Vulkan/Context.cpp)
 
 target_link_libraries(VoxelDynamics PUBLIC Vulkan::Vulkan glfw spdlog::spdlog)
 
