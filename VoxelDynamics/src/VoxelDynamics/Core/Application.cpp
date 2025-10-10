@@ -31,17 +31,23 @@ Application::~Application()
     glfwTerminate();
 }
 
-void Application::run() const
+void Application::run()
 {
+    onInit();
+
     int width = 0, height = 0;
     while (!glfwWindowShouldClose(_window))
     {
         glfwPollEvents();
 
+        onUpdate();
+
         glfwGetFramebufferSize(_window, &width, &height);
         if (!(width && height))
             continue;
     }
+
+    onShutdown();
 }
 
 GLFWwindow* Application::CreateWindow(const BuildInfo& appInfo)
@@ -116,7 +122,7 @@ GLFWwindow* Application::CreateWindow(const BuildInfo& appInfo)
 
 // Application Builder /////////////////////////////////////////////////////////////////////////////
 
-Application ApplicationBuilder::build() const
+Application Application::Builder::build() const
 {
     const Application::BuildInfo buildInfo{
         .contextInfo =
@@ -135,7 +141,7 @@ Application ApplicationBuilder::build() const
     return Application(buildInfo);
 }
 
-void ApplicationBuilder::run() const
+void Application::Builder::run() const
 {
     Application app = build();
     app.run();

@@ -44,11 +44,9 @@ public:
         Log::Level logLevel;
     } buildInfo;
 
-    Application();
-
     explicit Application(const BuildInfo& buildInfo);
 
-    ~Application();
+    virtual ~Application();
 
     // prevent copying
     Application(const Application&)            = delete;
@@ -58,7 +56,12 @@ public:
     Application(Application&&)            = delete;
     Application& operator=(Application&&) = delete;
 
-    void run() const;
+    void run();
+
+    // lifetime callbacks
+    virtual void onInit() {}
+    virtual void onUpdate() {}
+    virtual void onShutdown() {}
 
 private:
     const std::string _appName;
@@ -66,86 +69,90 @@ private:
     Vulkan::Context _context;
 
     static GLFWwindow* CreateWindow(const BuildInfo& createInfo);
-};
 
-// Application Builder /////////////////////////////////////////////////////////////////////////////
-
-class ApplicationBuilder
-{
 public:
-    Application build() const;
-    void run() const;
+    // Builder /////////////////////////////////////////////////////////////////////////////////////
 
-    // application ---------------------------------------------------------------------------------
-
-    ApplicationBuilder& logLevel(Log::Level level)
+    class Builder
     {
-        _logLevel = level;
-        return *this;
-    }
+    public:
+        Application build() const;
+        void run() const;
 
-    // window --------------------------------------------------------------------------------------
+        // application
+        // ---------------------------------------------------------------------------------
 
-    ApplicationBuilder& title(const std::string& title)
-    {
-        _title = title;
-        return *this;
-    }
+        Builder& logLevel(Log::Level level)
+        {
+            _logLevel = level;
+            return *this;
+        }
 
-    ApplicationBuilder& width(uint32_t width)
-    {
-        _width = width;
-        return *this;
-    }
+        // window
+        // --------------------------------------------------------------------------------------
 
-    ApplicationBuilder& height(uint32_t height)
-    {
-        _height = height;
-        return *this;
-    }
+        Builder& title(const std::string& title)
+        {
+            _title = title;
+            return *this;
+        }
 
-    ApplicationBuilder& placement(WindowPlacement placement)
-    {
-        _placement = placement;
-        return *this;
-    }
+        Builder& width(uint32_t width)
+        {
+            _width = width;
+            return *this;
+        }
 
-    // context -------------------------------------------------------------------------------------
+        Builder& height(uint32_t height)
+        {
+            _height = height;
+            return *this;
+        }
 
-    ApplicationBuilder& name(const std::string& name)
-    {
-        _name = name;
-        return *this;
-    }
+        Builder& placement(WindowPlacement placement)
+        {
+            _placement = placement;
+            return *this;
+        }
 
-    ApplicationBuilder& version(uint32_t major, uint32_t minor, uint32_t patch)
-    {
-        _version = Version(major, minor, patch);
-        return *this;
-    }
+        // context
+        // -------------------------------------------------------------------------------------
 
-    ApplicationBuilder& preferredDeviceType(vk::PhysicalDeviceType type)
-    {
-        _preferredDeviceType = type;
-        return *this;
-    }
+        Builder& name(const std::string& name)
+        {
+            _name = name;
+            return *this;
+        }
 
-    // =============================================================================================
+        Builder& version(uint32_t major, uint32_t minor, uint32_t patch)
+        {
+            _version = Version(major, minor, patch);
+            return *this;
+        }
 
-private:
-    // window
-    std::optional<std::string> _title = std::nullopt;
-    uint32_t _width                   = 800;
-    uint32_t _height                  = 600;
-    WindowPlacement _placement        = DefaultWindowPlacement();
+        Builder& preferredDeviceType(vk::PhysicalDeviceType type)
+        {
+            _preferredDeviceType = type;
+            return *this;
+        }
 
-    // context
-    std::string _name                           = "VxD Application";
-    uint64_t _version                           = Version(1, 0, 0);
-    vk::PhysicalDeviceType _preferredDeviceType = vk::PhysicalDeviceType::eDiscreteGpu;
+        // =============================================================================================
 
-    // application
-    Log::Level _logLevel = Log::Level::Info;
+    protected:
+        // window
+        std::optional<std::string> _title = std::nullopt;
+        uint32_t _width                   = 800;
+        uint32_t _height                  = 600;
+        WindowPlacement _placement        = DefaultWindowPlacement();
+
+        // context
+        std::string _name                           = "VxD Application";
+        uint64_t _version                           = Version(1, 0, 0);
+        vk::PhysicalDeviceType _preferredDeviceType = vk::PhysicalDeviceType::eDiscreteGpu;
+
+        // application
+        Log::Level _logLevel = Log::Level::Info;
+    };
 };
 
 } // namespace VoxelDynamics
