@@ -760,12 +760,12 @@ Context::Pipeline Context::createPipeline() const
 
     vk::raii::PipelineLayout pipelineLayout(*_device, pipelineLayoutInfo);
 
+    // create the graphics pipeline
     vk::PipelineRenderingCreateInfo pipelineRenderingInfo(
         {},                                // view mask
         1,                                 // color attachment count
         &_swapChain.surfaceFormat.format); // color attachment formats
 
-    // create the graphics pipeline
     vk::GraphicsPipelineCreateInfo pipelineInfo(
         {},
         shaderStages.size(),     // stage count
