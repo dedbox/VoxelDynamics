@@ -5,7 +5,7 @@
 namespace VoxelDynamics::Vulkan
 {
 
-Context::Context(GLFWwindow* window, const CreateInfo& contextInfo)
+Context::Context(GLFWwindow* window, const BuildInfo& contextInfo)
     : _instance(createInstance(contextInfo))
     , _surface(createSurface(window))
     , _physicalDevice(pickPhysicalDevice(contextInfo.preferredDeviceType))
@@ -17,7 +17,7 @@ Context::Context(GLFWwindow* window, const CreateInfo& contextInfo)
 
 // Instance ////////////////////////////////////////////////////////////////////////////////////////
 
-vk::raii::Instance Context::createInstance(const CreateInfo& contextInfo) const
+vk::raii::Instance Context::createInstance(const BuildInfo& contextInfo) const
 {
     const vk::ApplicationInfo appInfo(
         contextInfo.appName.c_str(),

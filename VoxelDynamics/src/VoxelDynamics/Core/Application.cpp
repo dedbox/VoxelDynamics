@@ -9,10 +9,12 @@ struct overloaded : Ts...
 namespace VoxelDynamics
 {
 
-Application::Application(const CreateInfo& appInfo)
-    : _appName(appInfo.contextInfo.appName)
-    , _window(CreateWindow(appInfo))
-    , _context(_window, appInfo.contextInfo)
+// Application /////////////////////////////////////////////////////////////////////////////////////
+
+Application::Application(const BuildInfo& buildInfo)
+    : _appName(buildInfo.contextInfo.appName)
+    , _window(CreateWindow(buildInfo))
+    , _context(_window, buildInfo.contextInfo)
 {
     glfwSetKeyCallback(_window, [](GLFWwindow* window, int key, int, int action, int) {
         if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
@@ -42,7 +44,7 @@ void Application::run() const
     }
 }
 
-GLFWwindow* Application::CreateWindow(const CreateInfo& appInfo)
+GLFWwindow* Application::CreateWindow(const BuildInfo& appInfo)
 {
     Log::Init(appInfo.contextInfo.appName);
     Log::SetLevel(appInfo.logLevel);
@@ -110,6 +112,33 @@ GLFWwindow* Application::CreateWindow(const CreateInfo& appInfo)
         appInfo.placement);
 
     return window;
+}
+
+// Application Builder /////////////////////////////////////////////////////////////////////////////
+
+Application ApplicationBuilder::build() const
+{
+    const Application::BuildInfo buildInfo{
+        .contextInfo =
+            {
+                .appName             = _name,
+                .appVersion          = _version,
+                .preferredDeviceType = _preferredDeviceType,
+            },
+        .title     = _title.value_or(_name),
+        .width     = _width,
+        .height    = _height,
+        .placement = _placement,
+        .logLevel  = _logLevel,
+    };
+
+    return Application(buildInfo);
+}
+
+void ApplicationBuilder::run() const
+{
+    Application app = build();
+    app.run();
 }
 
 } // namespace VoxelDynamics

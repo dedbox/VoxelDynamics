@@ -9,14 +9,14 @@ namespace VoxelDynamics::Vulkan
 class Context
 {
 public:
-    struct CreateInfo
+    struct BuildInfo
     {
-        std::string appName                        = "VoxelDynamics Application";
-        uint64_t appVersion                        = Version(1, 0, 0);
-        vk::PhysicalDeviceType preferredDeviceType = vk::PhysicalDeviceType::eDiscreteGpu;
-    };
+        std::string appName;
+        uint64_t appVersion;
+        vk::PhysicalDeviceType preferredDeviceType;
+    } buildInfo;
 
-    Context(GLFWwindow* window, const CreateInfo& contextInfo);
+    Context(GLFWwindow* window, const BuildInfo& contextInfo);
 
 private:
     using FeaturesChain = vk::StructureChain<
@@ -79,7 +79,7 @@ private:
 
     // Instance ////////////////////////////////////////////////////////////////////////////////////
 
-    vk::raii::Instance createInstance(const CreateInfo& contextInfo) const;
+    vk::raii::Instance createInstance(const BuildInfo& contextInfo) const;
 
     static constexpr std::vector<const char*> InstanceLayers();
     static std::vector<const char*> InstanceExtensions();
