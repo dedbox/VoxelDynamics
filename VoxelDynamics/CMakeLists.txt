@@ -4,9 +4,11 @@ project(VoxelDynamics)
 add_library(
   VoxelDynamics STATIC
   src/VoxelDynamics/Core/Application.cpp src/VoxelDynamics/Core/Log.cpp
-  src/VoxelDynamics/Core/Util.cpp src/VoxelDynamics/Renderer/Vulkan/Context.cpp)
+  src/VoxelDynamics/Core/Time.cpp src/VoxelDynamics/Core/Util.cpp
+  src/VoxelDynamics/Renderer/Vulkan/Context.cpp)
 
-target_link_libraries(VoxelDynamics PUBLIC Vulkan::Vulkan glfw spdlog::spdlog)
+target_link_libraries(VoxelDynamics PUBLIC Vulkan::Vulkan SDL3::SDL3
+                                           spdlog::spdlog)
 
 target_include_directories(VoxelDynamics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
@@ -61,4 +63,5 @@ target_precompile_headers(
   <variant>
   <vector>
   src/VoxelDynamics/Config.hpp
+  src/VoxelDynamics/Core/Exception.hpp
   src/VoxelDynamics/Core/Log.hpp)

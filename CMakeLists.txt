@@ -19,15 +19,19 @@ if(NOT Vulkan_FOUND)
   message(FATAL_ERROR "Vulkan not found.")
 endif()
 
-# GLFW -------------------------------------------------------------------------
+# SDL --------------------------------------------------------------------------
 
 FetchContent_Declare(
-  GLFW
-  GIT_REPOSITORY https://github.com/glfw/glfw.git
-  GIT_TAG 3.4
+  SDL
+  GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+  GIT_TAG release-3.2.24
   GIT_SHALLOW YES)
 
-FetchContent_MakeAvailable(GLFW)
+set(SDL_SHARED OFF)
+set(SDL_STATIC ON)
+
+FetchContent_MakeAvailable(SDL)
+
 
 # spdlog -----------------------------------------------------------------------
 

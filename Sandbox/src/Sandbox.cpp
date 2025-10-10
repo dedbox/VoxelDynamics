@@ -19,7 +19,7 @@ public:
 
 // Sandbox /////////////////////////////////////////////////////////////////////////////////////////
 
-int main()
+std::unique_ptr<VoxelDynamics::Application> VoxelDynamics::CreateApplication()
 {
     auto app = SandboxApp::Builder()
                    .version(0, 1, 0)
@@ -27,8 +27,5 @@ int main()
                    .width(1280)
                    .height(720)
                    .build();
-
-    app.run();
-
-    return 0;
+    return std::move(app);
 }

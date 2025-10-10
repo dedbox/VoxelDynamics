@@ -1,6 +1,7 @@
 #pragma once
 
-#include "GLFW/glfw3.h"
+#include "SDL3/SDL_events.h"
+#include "SDL3/SDL_video.h"
 
 #include "VoxelDynamics/Renderer/Vulkan/Context.hpp"
 
@@ -33,42 +34,44 @@ class Application
 public:
     struct BuildInfo
     {
-        Vulkan::Context::BuildInfo contextInfo;
+        Vulkan::Context::BuildInfo context;
         std::string title;
         uint32_t width;
         uint32_t height;
         WindowPlacement placement;
-        uint32_t x;
-        uint32_t y;
         bool resizable;
         Log::Level logLevel;
+        std::string identifier;
     } buildInfo;
 
     explicit Application(const BuildInfo& buildInfo);
 
     virtual ~Application();
 
+    // allow moving
+    Application(Application&&) noexcept            = default;
+    Application& operator=(Application&&) noexcept = default;
+
     // prevent copying
     Application(const Application&)            = delete;
     Application& operator=(const Application&) = delete;
 
-    // prevent moving
-    Application(Application&&)            = delete;
-    Application& operator=(Application&&) = delete;
+    // lifetime management
+    bool isDone() const { return _isDone; }
 
-    void run();
+    void update();
+    void handleSdlEvent(SDL_Event* event);
 
-    // lifetime callbacks
-    virtual void onInit() {}
-    virtual void onUpdate() {}
-    virtual void onShutdown() {}
+    virtual void onUpdate(double deltaTime) {}
 
 private:
-    const std::string _appName;
-    GLFWwindow* _window;
+    SDL_Window* _window;
     Vulkan::Context _context;
 
-    static GLFWwindow* CreateWindow(const BuildInfo& createInfo);
+    bool _isDone = false;
+    double _lastFrameTime;
+
+    static SDL_Window* CreateWindow(const BuildInfo& createInfo);
 
 public:
     // Builder /////////////////////////////////////////////////////////////////////////////////////
@@ -76,7 +79,7 @@ public:
     class Builder
     {
     public:
-        Application build() const;
+        std::unique_ptr<Application> build() const;
         void run() const;
 
         // application
@@ -85,6 +88,12 @@ public:
         Builder& logLevel(Log::Level level)
         {
             _logLevel = level;
+            return *this;
+        }
+
+        Builder& identifier(const std::string& identifier)
+        {
+            _identifier = identifier;
             return *this;
         }
 
@@ -106,6 +115,12 @@ public:
         Builder& height(uint32_t height)
         {
             _height = height;
+            return *this;
+        }
+
+        Builder& resizable(bool resizable)
+        {
+            _resizable = resizable;
             return *this;
         }
 
@@ -143,16 +158,20 @@ public:
         std::optional<std::string> _title = std::nullopt;
         uint32_t _width                   = 800;
         uint32_t _height                  = 600;
+        bool _resizable                   = false;
         WindowPlacement _placement        = DefaultWindowPlacement();
 
         // context
-        std::string _name                           = "VxD Application";
+        std::string _name                           = "VxD-App";
         uint64_t _version                           = Version(1, 0, 0);
         vk::PhysicalDeviceType _preferredDeviceType = vk::PhysicalDeviceType::eDiscreteGpu;
 
         // application
-        Log::Level _logLevel = Log::Level::Info;
+        Log::Level _logLevel    = Log::Level::Info;
+        std::string _identifier = std::format("com.voxeldynamics.{}", _name);
     };
 };
+
+extern std::unique_ptr<Application> CreateApplication();
 
 } // namespace VoxelDynamics

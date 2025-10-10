@@ -1,6 +1,7 @@
 #pragma once
 
-#include "GLFW/glfw3.h"
+#include "SDL3/SDL_video.h"
+
 #include "vulkan/vulkan_raii.hpp"
 
 namespace VoxelDynamics::Vulkan
@@ -16,7 +17,17 @@ public:
         vk::PhysicalDeviceType preferredDeviceType;
     } buildInfo;
 
-    Context(GLFWwindow* window, const BuildInfo& contextInfo);
+    Context(SDL_Window* window, const BuildInfo& contextInfo);
+
+    ~Context() = default;
+
+    // allow moving
+    Context(Context&&) noexcept            = default;
+    Context& operator=(Context&&) noexcept = default;
+
+    // prevent copying
+    Context(const Context&)            = delete;
+    Context& operator=(const Context&) = delete;
 
 private:
     using FeaturesChain = vk::StructureChain<
@@ -97,7 +108,7 @@ private:
 
     // Surface /////////////////////////////////////////////////////////////////////////////////////
 
-    vk::raii::SurfaceKHR createSurface(GLFWwindow* window) const;
+    vk::raii::SurfaceKHR createSurface(SDL_Window* window) const;
 
     // Physical Device /////////////////////////////////////////////////////////////////////////////
 
@@ -126,7 +137,7 @@ private:
 
     // Swap Chain //////////////////////////////////////////////////////////////////////////////////
 
-    SwapChain createSwapChain(GLFWwindow* window) const;
+    SwapChain createSwapChain(SDL_Window* window) const;
 
     // Pipeline ////////////////////////////////////////////////////////////////////////////////////
 

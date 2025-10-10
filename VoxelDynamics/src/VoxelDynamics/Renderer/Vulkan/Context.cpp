@@ -1,11 +1,13 @@
 #include "VoxelDynamics/Renderer/Vulkan/Context.hpp"
 
+#include "SDL3/SDL_vulkan.h"
+
 #include "VoxelDynamics/Core/Util.hpp"
 
 namespace VoxelDynamics::Vulkan
 {
 
-Context::Context(GLFWwindow* window, const BuildInfo& contextInfo)
+Context::Context(SDL_Window* window, const BuildInfo& contextInfo)
     : _instance(createInstance(contextInfo))
     , _surface(createSurface(window))
     , _physicalDevice(pickPhysicalDevice(contextInfo.preferredDeviceType))
@@ -57,8 +59,8 @@ constexpr std::vector<const char*> Context::InstanceLayers()
 
 std::vector<const char*> Context::InstanceExtensions()
 {
-    uint32_t count            = 0;
-    const auto raw_extensions = glfwGetRequiredInstanceExtensions(&count);
+    uint32_t count      = 0;
+    auto raw_extensions = SDL_Vulkan_GetInstanceExtensions(&count);
     std::vector<const char*> extensions(raw_extensions, raw_extensions + count);
     if (is_debugging_enabled)
         extensions.push_back(vk::EXTDebugUtilsExtensionName);
@@ -163,12 +165,11 @@ constexpr vk::DebugUtilsMessengerCreateInfoEXT Context::DebugUtilsMessengerCreat
 
 // Surface /////////////////////////////////////////////////////////////////////////////////////////
 
-vk::raii::SurfaceKHR Context::createSurface(GLFWwindow* window) const
+vk::raii::SurfaceKHR Context::createSurface(SDL_Window* window) const
 {
     VkSurfaceKHR surface = VK_NULL_HANDLE;
-    VkResult result      = glfwCreateWindowSurface(*_instance, window, nullptr, &surface);
-    if (result != VK_SUCCESS)
-        throw std::runtime_error("GLFW Error: surface creation failed");
+    if (!SDL_Vulkan_CreateSurface(window, *_instance, nullptr, &surface))
+        throw SDLException("Could not create Vulkan surface");
     return vk::raii::SurfaceKHR(_instance, surface);
 }
 
@@ -503,7 +504,7 @@ Context::Device Context::createDevice() const
 
 // Swap Chain //////////////////////////////////////////////////////////////////////////////////////
 
-Context::SwapChain Context::createSwapChain(GLFWwindow* window) const
+Context::SwapChain Context::createSwapChain(SDL_Window* window) const
 {
     const auto caps = _physicalDevice->getSurfaceCapabilitiesKHR(_surface);
 
@@ -513,7 +514,8 @@ Context::SwapChain Context::createSwapChain(GLFWwindow* window) const
             return caps.currentExtent;
 
         int width = 0, height = 0;
-        glfwGetFramebufferSize(window, &width, &height);
+        if (!SDL_GetWindowSizeInPixels(window, &width, &height))
+            throw SDLException("Could not determine window size");
 
         return {
             std::clamp<uint32_t>(width, caps.minImageExtent.width, caps.minImageExtent.height),

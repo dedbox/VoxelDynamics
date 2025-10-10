@@ -1,5 +1,10 @@
 #include "VoxelDynamics/Core/Application.hpp"
 
+#include "SDL3/SDL_events.h"
+#include "SDL3/SDL_init.h"
+
+#include "VoxelDynamics/Core/Time.hpp"
+
 template <class... Ts>
 struct overloaded : Ts...
 {
@@ -12,48 +17,23 @@ namespace VoxelDynamics
 // Application /////////////////////////////////////////////////////////////////////////////////////
 
 Application::Application(const BuildInfo& buildInfo)
-    : _appName(buildInfo.contextInfo.appName)
-    , _window(CreateWindow(buildInfo))
-    , _context(_window, buildInfo.contextInfo)
+    : _window(CreateWindow(buildInfo))
+    , _context(_window, buildInfo.context)
+    , _lastFrameTime(Time::Seconds())
 {
-    glfwSetKeyCallback(_window, [](GLFWwindow* window, int key, int, int action, int) {
-        if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-            glfwSetWindowShouldClose(window, GLFW_TRUE);
-    });
 
-    glfwShowWindow(_window);
+    SDL_ShowWindow(_window);
 }
 
 Application::~Application()
 {
-    Log::Core::Info("Terminating {}", _appName);
-    glfwDestroyWindow(_window);
-    glfwTerminate();
+    Log::Core::Info("Terminating {}", buildInfo.context.appName);
 }
 
-void Application::run()
+SDL_Window* Application::CreateWindow(const BuildInfo& buildInfo)
 {
-    onInit();
-
-    int width = 0, height = 0;
-    while (!glfwWindowShouldClose(_window))
-    {
-        glfwPollEvents();
-
-        onUpdate();
-
-        glfwGetFramebufferSize(_window, &width, &height);
-        if (!(width && height))
-            continue;
-    }
-
-    onShutdown();
-}
-
-GLFWwindow* Application::CreateWindow(const BuildInfo& appInfo)
-{
-    Log::Init(appInfo.contextInfo.appName);
-    Log::SetLevel(appInfo.logLevel);
+    Log::Init(buildInfo.context.appName);
+    Log::SetLevel(buildInfo.logLevel);
 
     Log::Core::Info(
         "{} {}.{}.{}",
@@ -62,35 +42,35 @@ GLFWwindow* Application::CreateWindow(const BuildInfo& appInfo)
         vk::versionMinor(EngineVersion),
         vk::versionPatch(EngineVersion));
 
-    Log::Core::Info(
-        "Starting {}, version {}.{}.{}",
-        appInfo.contextInfo.appName,
-        vk::versionMajor(appInfo.contextInfo.appVersion),
-        vk::versionMinor(appInfo.contextInfo.appVersion),
-        vk::versionPatch(appInfo.contextInfo.appVersion));
+    const std::string appVersion = std::format(
+        "{}.{}.{}",
+        vk::versionMajor(buildInfo.context.appVersion),
+        vk::versionMinor(buildInfo.context.appVersion),
+        vk::versionPatch(buildInfo.context.appVersion));
 
-    glfwSetErrorCallback([](int code, const char* description) {
-        Log::Core::Error("GLFW Error ({}): {}", code, description);
-    });
+    Log::Core::Info("Starting {}, version {}", buildInfo.context.appName, appVersion);
 
-    if (glfwInit() != GLFW_TRUE)
-        throw std::runtime_error("GLFW Error: initialzation failed");
+    const std::string cwd = std::filesystem::current_path();
+    Log::Core::Info("Current working directory is {}", cwd);
 
-    if (glfwVulkanSupported() == GLFW_FALSE)
-        throw std::runtime_error("GLFW Error: Vulkan is not supported");
+    if (!SDL_Init(SDL_INIT_VIDEO))
+        throw SDLException("Could not initialize SDL");
 
-    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-    glfwWindowHint(GLFW_RESIZABLE, appInfo.resizable ? GLFW_TRUE : GLFW_FALSE);
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    if (!SDL_SetAppMetadata(
+            buildInfo.context.appName.c_str(), appVersion.c_str(), buildInfo.identifier.c_str()))
+        throw SDLException("Could not set application metadata");
 
-    GLFWwindow* window = glfwCreateWindow(
-        static_cast<int>(appInfo.width),
-        static_cast<int>(appInfo.height),
-        appInfo.title.c_str(),
-        nullptr,
-        nullptr);
+    SDL_WindowFlags flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_VULKAN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+    if (buildInfo.resizable)
+        flags |= SDL_WINDOW_RESIZABLE;
 
-    Log::Core::Assert(window, "glfwCreateWindow() failed");
+    SDL_Window* window = SDL_CreateWindow(
+        buildInfo.title.c_str(),
+        static_cast<int>(buildInfo.width),
+        static_cast<int>(buildInfo.height),
+        flags);
+    if (!window)
+        throw SDLException("Could not create window");
 
     std::visit(
         overloaded{
@@ -99,33 +79,66 @@ GLFWwindow* Application::CreateWindow(const BuildInfo& appInfo)
             },
 
             [&](CenteredWindowPlacement) {
+                // determine the current screen
+                const SDL_DisplayID displayId = SDL_GetDisplayForWindow(window);
+                if (!displayId)
+                    throw SDLException("Could not find the current screen");
+
                 // get dimensions of the screen
-                const GLFWvidmode* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+                const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(displayId);
+                if (!mode)
+                    throw SDLException("Could not determine the current screen resolution");
 
                 //  calculate the position of the top-left corner
-                const uint32_t x = (mode->width - appInfo.width) >> 1U;
-                const uint32_t y = (mode->height - appInfo.height) >> 1U;
+                const uint32_t x = (mode->w - buildInfo.width) >> 1U;
+                const uint32_t y = (mode->h - buildInfo.height) >> 1U;
 
                 // apply the calculated position
-                glfwSetWindowPos(window, static_cast<int>(x), static_cast<int>(y));
+                SDL_SetWindowPosition(window, static_cast<int>(x), static_cast<int>(y));
             },
 
             [&](FixedWindowPlacement pos) {
-                // apply the given position
-                glfwSetWindowPos(window, static_cast<int>(pos.x), static_cast<int>(pos.y));
+                // apply the given position directly
+                SDL_SetWindowPosition(window, static_cast<int>(pos.x), static_cast<int>(pos.y));
             },
         },
-        appInfo.placement);
+        buildInfo.placement);
 
     return window;
 }
 
+// Event Handling ----------------------------------------------------------------------------------
+
+void Application::update()
+{
+    const double frameTime = Time::Seconds();
+    const double deltaTime = frameTime - _lastFrameTime;
+    _lastFrameTime         = frameTime;
+
+    onUpdate(deltaTime);
+}
+
+void Application::handleSdlEvent(SDL_Event* event)
+{
+    switch (event->type)
+    {
+    case SDL_EVENT_QUIT:
+    case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+        _isDone = true;
+        break;
+
+    default:
+        // unhandled
+        break;
+    }
+}
+
 // Application Builder /////////////////////////////////////////////////////////////////////////////
 
-Application Application::Builder::build() const
+std::unique_ptr<Application> Application::Builder::build() const
 {
     const Application::BuildInfo buildInfo{
-        .contextInfo =
+        .context =
             {
                 .appName             = _name,
                 .appVersion          = _version,
@@ -135,16 +148,11 @@ Application Application::Builder::build() const
         .width     = _width,
         .height    = _height,
         .placement = _placement,
+        .resizable = _resizable,
         .logLevel  = _logLevel,
     };
 
-    return Application(buildInfo);
-}
-
-void Application::Builder::run() const
-{
-    Application app = build();
-    app.run();
+    return std::make_unique<Application>(buildInfo);
 }
 
 } // namespace VoxelDynamics
