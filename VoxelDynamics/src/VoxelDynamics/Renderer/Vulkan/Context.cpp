@@ -13,7 +13,6 @@ Context::Context(SDL_Window* window, const BuildInfo& contextInfo)
     , _physicalDevice(pickPhysicalDevice(contextInfo.preferredDeviceType))
     , _device(createDevice())
     , _swapChain(createSwapChain(window))
-    , _pipeline(createPipeline())
 {
 }
 
@@ -130,7 +129,7 @@ VKAPI_ATTR vk::Bool32 VKAPI_CALL Context::DebugUtilsMessengerCallback(
     switch (messageSeverity)
     {
     case vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose:
-        Log::Core::Trace("{}", pCallbackData->pMessage);
+        Log::Core::Debug("{}", pCallbackData->pMessage);
         break;
     case vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo:
         Log::Core::Info("{}", pCallbackData->pMessage);
@@ -506,6 +505,8 @@ Context::Device Context::createDevice() const
 
 Context::SwapChain Context::createSwapChain(SDL_Window* window) const
 {
+    Log::Core::Info("Querying surface capabilities:");
+
     const auto caps = _physicalDevice->getSurfaceCapabilitiesKHR(_surface);
 
     // determine swap chain image dimensions
@@ -523,7 +524,7 @@ Context::SwapChain Context::createSwapChain(SDL_Window* window) const
         };
     }();
 
-    Log::Core::Trace("Surface extent: {}x{}", extent.width, extent.height);
+    Log::Core::Info("  extent: {}x{}", extent.width, extent.height);
 
     // choose a surface format
     const auto surfaceFormat = [&]() -> vk::SurfaceFormatKHR {
@@ -548,22 +549,22 @@ Context::SwapChain Context::createSwapChain(SDL_Window* window) const
             return false;
         }();
 
-        Log::Core::Trace("Native BGR support: {}", isNativeBgr ? "yes" : "no");
+        Log::Core::Info("  native BGR: {}", isNativeBgr ? "yes" : "no");
 
         // for now, hard code client's preferred format and color space
         const auto preferred = vk::SurfaceFormatKHR(
             isNativeBgr ? vk::Format::eB8G8R8A8Unorm : vk::Format::eR8G8B8A8Unorm,
             vk::ColorSpaceKHR::eSrgbNonlinear);
 
-        Log::Core::Trace(
-            "Preferred format: {} / {}",
+        Log::Core::Info(
+            "  preferred format: {} / {}",
             vk::to_string(preferred.format),
             vk::to_string(preferred.colorSpace));
 
-        Log::Core::Trace("Available formats:");
+        Log::Core::Info("  available formats:");
         for (const auto& format : _physicalDevice.surfaceFormats)
-            Log::Core::Trace(
-                "  {} / {}", vk::to_string(format.format), vk::to_string(format.colorSpace));
+            Log::Core::Info(
+                "    {} / {}", vk::to_string(format.format), vk::to_string(format.colorSpace));
 
         // check if device supports client's preferred format and color space
         for (const auto& format : _physicalDevice.surfaceFormats)
@@ -583,8 +584,6 @@ Context::SwapChain Context::createSwapChain(SDL_Window* window) const
         return _physicalDevice.surfaceFormats[0];
     }();
 
-    Log::Core::Trace("Chosen format: {}", SurfaceFormatName(surfaceFormat));
-
     // choose a present mode
     const auto presentMode = [&]() -> vk::PresentModeKHR {
         const auto& modes = _physicalDevice.presentModes;
@@ -597,14 +596,10 @@ Context::SwapChain Context::createSwapChain(SDL_Window* window) const
         throw std::runtime_error("Device offers no supported present modes");
     }();
 
-    Log::Core::Trace("Present mode: {}", vk::to_string(presentMode));
-
     // determine the number of swap chain images
     const auto imageCount = caps.maxImageCount == 0
                                 ? caps.minImageCount + 1
                                 : std::min(caps.minImageCount + 1, caps.maxImageCount);
-
-    Log::Core::Trace("Number of swap chain images: {}", imageCount);
 
     // determine unique queue family indices
     const auto queueFamilyIndices = [&]() -> std::set<uint32_t> {
@@ -667,17 +662,26 @@ Context::SwapChain Context::createSwapChain(SDL_Window* window) const
             std::format("SwapChain Image View {}", i));
     }
 
-    Log::Core::Info("Swap chain created");
+    Log::Core::Info("Swap chain created:");
+    Log::Core::Info("  number of swap chain images: {}", imageCount);
+    Log::Core::Info("  chosen format: {}", SurfaceFormatName(surfaceFormat));
+    Log::Core::Info("  present mode: {}", vk::to_string(presentMode));
 
     return SwapChain(std::move(swapChain), images, surfaceFormat, extent, std::move(imageViews));
 }
 
 // Pipeline ////////////////////////////////////////////////////////////////////////////////////////
 
-Context::Pipeline Context::createPipeline() const
+Context::Pipeline Context::createGraphicsPipeline(const std::string& spvFilePath) const
 {
+    // load SPIR-V file
+    const std::vector<char> code = readFile(spvFilePath);
+
     // create shader module
-    const auto shaderModule = createShaderModule(readFile("shaders/slang.slang.spv"));
+    const auto shaderModule = vk::raii::ShaderModule(
+        *_device,
+        vk::ShaderModuleCreateInfo(
+            {}, code.size() * sizeof(char), reinterpret_cast<const uint32_t*>(code.data())));
 
     // define programmable shader stages
     std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages = {
@@ -688,6 +692,8 @@ Context::Pipeline Context::createPipeline() const
         vk::PipelineShaderStageCreateInfo(
             {}, vk::ShaderStageFlagBits::eFragment, shaderModule, "fragMain"),
     };
+
+    Log::Core::Info("Loaded SPIR-V bytecode file `{}'", spvFilePath);
 
     // describe vertex data format
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
@@ -793,15 +799,6 @@ Context::Pipeline Context::createPipeline() const
     Log::Core::Info("Shader pipeline created");
 
     return Pipeline(std::move(pipelineLayout), std::move(graphicsPipeline));
-}
-
-[[nodiscard]] vk::raii::ShaderModule Context::createShaderModule(
-    const std::vector<char>& code) const
-{
-    return vk::raii::ShaderModule(
-        *_device,
-        vk::ShaderModuleCreateInfo(
-            {}, code.size() * sizeof(char), reinterpret_cast<const uint32_t*>(code.data())));
 }
 
 } // namespace VoxelDynamics::Vulkan

@@ -3,7 +3,6 @@
 #include "SDL3/SDL_events.h"
 #include "SDL3/SDL_video.h"
 
-#include "VoxelDynamics/Core/Event.hpp"
 #include "VoxelDynamics/Renderer/Vulkan/Context.hpp"
 
 namespace VoxelDynamics
@@ -76,8 +75,11 @@ public:
 
 private:
     SDL_Window* _window;
+
+protected:
     Vulkan::Context _context;
 
+private:
     bool _isDone = false;
     double _lastFrameTime;
 

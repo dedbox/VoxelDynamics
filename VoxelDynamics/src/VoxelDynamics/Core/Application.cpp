@@ -3,6 +3,7 @@
 #include "SDL3/SDL_events.h"
 #include "SDL3/SDL_init.h"
 
+#include "VoxelDynamics/Core/Event.hpp"
 #include "VoxelDynamics/Core/EventBus.hpp"
 #include "VoxelDynamics/Core/Time.hpp"
 

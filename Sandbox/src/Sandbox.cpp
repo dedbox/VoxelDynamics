@@ -9,6 +9,7 @@ class SandboxApp : public Application
 public:
     explicit SandboxApp(const Application::BuildInfo& buildInfo)
         : Application(buildInfo)
+        , _pipeline(_context.createGraphicsPipeline("shaders/slang.slang.spv"))
     {
         // connect event listeners
         Event::Bus::Connect<Event::WindowClose, &SandboxApp::onClose>(this);
@@ -40,6 +41,9 @@ public:
         VoxelDynamics::Log::Trace(
             "unhandled KeyDown event: {}{}", keyName, event.repeat ? " (repeat)" : "");
     }
+
+private:
+    Vulkan::Context::Pipeline _pipeline;
 };
 
 // Sandbox App Builder /////////////////////////////////////////////////////////////////////////////

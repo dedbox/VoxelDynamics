@@ -29,6 +29,16 @@ public:
     Context(const Context&)            = delete;
     Context& operator=(const Context&) = delete;
 
+    // Pipeline ////////////////////////////////////////////////////////////////////////////////////
+
+    struct Pipeline
+    {
+        vk::raii::PipelineLayout layout;
+        vk::raii::Pipeline graphics;
+    };
+
+    Pipeline createGraphicsPipeline(const std::string& spvFilePath) const;
+
 private:
     using FeaturesChain = vk::StructureChain<
         vk::PhysicalDeviceFeatures2,
@@ -82,12 +92,6 @@ private:
         std::vector<vk::raii::ImageView> imageViews;
     } _swapChain;
 
-    struct Pipeline
-    {
-        vk::raii::PipelineLayout layout;
-        vk::raii::Pipeline graphics;
-    } _pipeline;
-
     // Instance ////////////////////////////////////////////////////////////////////////////////////
 
     vk::raii::Instance createInstance(const BuildInfo& contextInfo) const;
@@ -138,12 +142,6 @@ private:
     // Swap Chain //////////////////////////////////////////////////////////////////////////////////
 
     SwapChain createSwapChain(SDL_Window* window) const;
-
-    // Pipeline ////////////////////////////////////////////////////////////////////////////////////
-
-    Pipeline createPipeline() const;
-
-    [[nodiscard]] vk::raii::ShaderModule createShaderModule(const std::vector<char>& code) const;
 };
 
 } // namespace VoxelDynamics::Vulkan
