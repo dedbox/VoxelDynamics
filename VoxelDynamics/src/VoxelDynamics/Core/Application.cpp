@@ -18,9 +18,10 @@ namespace VoxelDynamics
 
 // Application /////////////////////////////////////////////////////////////////////////////////////
 
-Application::Application(const BuildInfo& buildInfo)
-    : _window(CreateWindow(buildInfo))
-    , _context(_window, buildInfo.context)
+Application::Application(const BuildInfo& buildInfo_)
+    : buildInfo(buildInfo_)
+    , _window(CreateWindow(buildInfo_))
+    , _context(_window, buildInfo_.context)
     , _lastFrameTime(Time::Seconds())
 {
 }

@@ -83,7 +83,7 @@ private:
     bool _isDone = false;
     double _lastFrameTime;
 
-    static SDL_Window* CreateWindow(const BuildInfo& createInfo);
+    static SDL_Window* CreateWindow(const BuildInfo& buildInfo);
 };
 
 extern std::unique_ptr<Application> CreateApplication();

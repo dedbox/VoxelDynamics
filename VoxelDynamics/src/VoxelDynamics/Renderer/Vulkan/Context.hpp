@@ -17,7 +17,7 @@ public:
         vk::PhysicalDeviceType preferredDeviceType;
     } buildInfo;
 
-    Context(SDL_Window* window, const BuildInfo& contextInfo);
+    Context(SDL_Window* window, const BuildInfo& buildInfo);
 
     ~Context() = default;
 
@@ -94,7 +94,7 @@ private:
 
     // Instance ////////////////////////////////////////////////////////////////////////////////////
 
-    vk::raii::Instance createInstance(const BuildInfo& contextInfo) const;
+    vk::raii::Instance createInstance() const;
 
     static constexpr std::vector<const char*> InstanceLayers();
     static std::vector<const char*> InstanceExtensions();
@@ -116,7 +116,7 @@ private:
 
     // Physical Device /////////////////////////////////////////////////////////////////////////////
 
-    PhysicalDevice pickPhysicalDevice(const vk::PhysicalDeviceType& preferredType) const;
+    PhysicalDevice pickPhysicalDevice() const;
 
     static constexpr std::vector<const char*> DeviceExtensions();
 

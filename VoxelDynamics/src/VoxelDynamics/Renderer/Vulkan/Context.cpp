@@ -7,10 +7,11 @@
 namespace VoxelDynamics::Vulkan
 {
 
-Context::Context(SDL_Window* window, const BuildInfo& contextInfo)
-    : _instance(createInstance(contextInfo))
+Context::Context(SDL_Window* window, const BuildInfo& buildInfo_) // NOLINT
+    : buildInfo(buildInfo_)
+    , _instance(createInstance())
     , _surface(createSurface(window))
-    , _physicalDevice(pickPhysicalDevice(contextInfo.preferredDeviceType))
+    , _physicalDevice(pickPhysicalDevice())
     , _device(createDevice())
     , _swapChain(createSwapChain(window))
 {
@@ -18,11 +19,11 @@ Context::Context(SDL_Window* window, const BuildInfo& contextInfo)
 
 // Instance ////////////////////////////////////////////////////////////////////////////////////////
 
-vk::raii::Instance Context::createInstance(const BuildInfo& contextInfo) const
+vk::raii::Instance Context::createInstance() const
 {
     const vk::ApplicationInfo appInfo(
-        contextInfo.appName.c_str(),
-        contextInfo.appVersion,
+        buildInfo.appName.c_str(),
+        buildInfo.appVersion,
         EngineName.c_str(),
         EngineVersion,
         vk::ApiVersion13);
@@ -174,8 +175,7 @@ vk::raii::SurfaceKHR Context::createSurface(SDL_Window* window) const
 
 // Physical Device /////////////////////////////////////////////////////////////////////////////////
 
-Context::PhysicalDevice Context::pickPhysicalDevice(
-    const vk::PhysicalDeviceType& preferredType) const
+Context::PhysicalDevice Context::pickPhysicalDevice() const
 {
     Log::Core::Trace("Picking a physical device...");
 
@@ -227,7 +227,7 @@ Context::PhysicalDevice Context::pickPhysicalDevice(
     }};
 
     std::array<int, 3> binOrder{};
-    switch (preferredType)
+    switch (buildInfo.preferredDeviceType)
     {
     case vk::PhysicalDeviceType::eDiscreteGpu:
         binOrder = {0, 1, 2};
