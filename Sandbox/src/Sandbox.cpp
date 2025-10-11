@@ -1,6 +1,6 @@
 #include <VoxelDynamics.hpp>
 
-// Application /////////////////////////////////////////////////////////////////////////////////////
+// Sandbox App /////////////////////////////////////////////////////////////////////////////////////
 
 using namespace VoxelDynamics;
 
@@ -40,41 +40,42 @@ public:
         VoxelDynamics::Log::Trace(
             "unhandled KeyDown event: {}{}", keyName, event.repeat ? " (repeat)" : "");
     }
-
-public:
-    class Builder : public Application::Builder
-    {
-    public:
-        Builder()
-        {
-            _name      = "Sandbox";
-            _placement = VoxelDynamics::CenteredWindowPlacement();
-            _hidden    = true;
-            _logLevel  = VoxelDynamics::Log::Level::Trace;
-        }
-
-        ~Builder() override = default;
-
-        // allow moving
-        Builder(Builder&&)            = default;
-        Builder& operator=(Builder&&) = default;
-
-        // allow copying
-        Builder(const Builder&)            = default;
-        Builder& operator=(const Builder&) = default;
-
-        std::unique_ptr<Application> build() const override
-        {
-            return std::make_unique<SandboxApp>(GetBuildInfo());
-        }
-    };
 };
 
-// Sandbox /////////////////////////////////////////////////////////////////////////////////////////
+// Sandbox App Builder /////////////////////////////////////////////////////////////////////////////
+
+class SanndboxAppBuilder : public ApplicationBuilder
+{
+public:
+    SanndboxAppBuilder()
+    {
+        _name      = "Sandbox";
+        _placement = VoxelDynamics::CenteredWindowPlacement();
+        _hidden    = true;
+        _logLevel  = VoxelDynamics::Log::Level::Debug;
+    }
+
+    // allow copying
+    SanndboxAppBuilder(const SanndboxAppBuilder&)            = default;
+    SanndboxAppBuilder& operator=(const SanndboxAppBuilder&) = default;
+
+    // prevent moving
+    SanndboxAppBuilder(SanndboxAppBuilder&&)            = delete;
+    SanndboxAppBuilder& operator=(SanndboxAppBuilder&&) = delete;
+
+    ~SanndboxAppBuilder() override = default;
+
+    std::unique_ptr<Application> build() const override
+    {
+        return std::make_unique<SandboxApp>(GetBuildInfo());
+    }
+};
+
+// Create Application //////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<VoxelDynamics::Application> VoxelDynamics::CreateApplication()
 {
-    auto app = SandboxApp::Builder()
+    auto app = SanndboxAppBuilder()
                    .version(0, 1, 0)
                    .title("Hello, world!")
                    .width(1280)

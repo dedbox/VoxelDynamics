@@ -154,34 +154,4 @@ void Application::handleSdlEvent(SDL_Event* event)
     }
 }
 
-// Application Builder /////////////////////////////////////////////////////////////////////////////
-
-const Application::BuildInfo Application::Builder::GetBuildInfo() const
-{
-    return Application::BuildInfo{
-        // context
-        .context =
-            {
-                .appName             = _name,
-                .appVersion          = _version,
-                .preferredDeviceType = _preferredDeviceType,
-            },
-        // window
-        .title     = _title.value_or(_name),
-        .width     = _width,
-        .height    = _height,
-        .placement = _placement,
-        .resizable = _resizable,
-        .hidden    = _hidden,
-        // application
-        .logLevel   = _logLevel,
-        .identifier = _identifier,
-    };
-}
-
-std::unique_ptr<Application> Application::Builder::build() const
-{
-    return std::make_unique<Application>(GetBuildInfo());
-}
-
 } // namespace VoxelDynamics
