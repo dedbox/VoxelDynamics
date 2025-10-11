@@ -3,6 +3,7 @@
 #include "SDL3/SDL_events.h"
 #include "SDL3/SDL_init.h"
 
+#include "VoxelDynamics/Core/EventBus.hpp"
 #include "VoxelDynamics/Core/Time.hpp"
 
 template <class... Ts>
@@ -21,8 +22,6 @@ Application::Application(const BuildInfo& buildInfo)
     , _context(_window, buildInfo.context)
     , _lastFrameTime(Time::Seconds())
 {
-
-    SDL_ShowWindow(_window);
 }
 
 Application::~Application()
@@ -60,9 +59,11 @@ SDL_Window* Application::CreateWindow(const BuildInfo& buildInfo)
             buildInfo.context.appName.c_str(), appVersion.c_str(), buildInfo.identifier.c_str()))
         throw SDLException("Could not set application metadata");
 
-    SDL_WindowFlags flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_VULKAN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
+    SDL_WindowFlags flags = SDL_WINDOW_VULKAN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
     if (buildInfo.resizable)
         flags |= SDL_WINDOW_RESIZABLE;
+    if (buildInfo.hidden)
+        flags |= SDL_WINDOW_HIDDEN;
 
     SDL_Window* window = SDL_CreateWindow(
         buildInfo.title.c_str(),
@@ -107,7 +108,21 @@ SDL_Window* Application::CreateWindow(const BuildInfo& buildInfo)
     return window;
 }
 
-// Event Handling ----------------------------------------------------------------------------------
+// Window Management ///////////////////////////////////////////////////////////////////////////////
+
+void Application::showWindow() const
+{
+    if (!SDL_ShowWindow(_window))
+        throw SDLException("Could not show window");
+}
+
+void Application::hideWindow() const
+{
+    if (!SDL_HideWindow(_window))
+        throw SDLException("Could not hide window");
+}
+
+// Lifetime Management /////////////////////////////////////////////////////////////////////////////
 
 void Application::update()
 {
@@ -118,13 +133,19 @@ void Application::update()
     onUpdate(deltaTime);
 }
 
+// Event Handling //////////////////////////////////////////////////////////////////////////////////
+
 void Application::handleSdlEvent(SDL_Event* event)
 {
     switch (event->type)
     {
     case SDL_EVENT_QUIT:
     case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-        _isDone = true;
+        Event::Bus::Trigger<Event::WindowClose>();
+        break;
+
+    case SDL_EVENT_KEY_DOWN:
+        Event::Bus::Trigger<Event::KeyDown>(event->key.key, event->key.repeat);
         break;
 
     default:
@@ -135,24 +156,32 @@ void Application::handleSdlEvent(SDL_Event* event)
 
 // Application Builder /////////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<Application> Application::Builder::build() const
+const Application::BuildInfo Application::Builder::GetBuildInfo() const
 {
-    const Application::BuildInfo buildInfo{
+    return Application::BuildInfo{
+        // context
         .context =
             {
                 .appName             = _name,
                 .appVersion          = _version,
                 .preferredDeviceType = _preferredDeviceType,
             },
+        // window
         .title     = _title.value_or(_name),
         .width     = _width,
         .height    = _height,
         .placement = _placement,
         .resizable = _resizable,
-        .logLevel  = _logLevel,
+        .hidden    = _hidden,
+        // application
+        .logLevel   = _logLevel,
+        .identifier = _identifier,
     };
+}
 
-    return std::make_unique<Application>(buildInfo);
+std::unique_ptr<Application> Application::Builder::build() const
+{
+    return std::make_unique<Application>(GetBuildInfo());
 }
 
 } // namespace VoxelDynamics

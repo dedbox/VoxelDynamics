@@ -3,6 +3,7 @@
 #include "SDL3/SDL_events.h"
 #include "SDL3/SDL_video.h"
 
+#include "VoxelDynamics/Core/Event.hpp"
 #include "VoxelDynamics/Renderer/Vulkan/Context.hpp"
 
 namespace VoxelDynamics
@@ -34,12 +35,16 @@ class Application
 public:
     struct BuildInfo
     {
+        // context
         Vulkan::Context::BuildInfo context;
+        // window
         std::string title;
         uint32_t width;
         uint32_t height;
         WindowPlacement placement;
         bool resizable;
+        bool hidden;
+        // application
         Log::Level logLevel;
         std::string identifier;
     } buildInfo;
@@ -56,13 +61,18 @@ public:
     Application(const Application&)            = delete;
     Application& operator=(const Application&) = delete;
 
+    // window management
+    void showWindow() const;
+    void hideWindow() const;
+
     // lifetime management
     bool isDone() const { return _isDone; }
+    void quit() { _isDone = true; }
 
     void update();
-    void handleSdlEvent(SDL_Event* event);
-
     virtual void onUpdate(double deltaTime) {}
+
+    void handleSdlEvent(SDL_Event* event);
 
 private:
     SDL_Window* _window;
@@ -79,8 +89,11 @@ public:
     class Builder
     {
     public:
-        std::unique_ptr<Application> build() const;
-        void run() const;
+        virtual ~Builder() = default;
+
+        const BuildInfo GetBuildInfo() const;
+
+        virtual std::unique_ptr<Application> build() const;
 
         // application
         // ---------------------------------------------------------------------------------
@@ -118,15 +131,21 @@ public:
             return *this;
         }
 
+        Builder& placement(WindowPlacement placement)
+        {
+            _placement = placement;
+            return *this;
+        }
+
         Builder& resizable(bool resizable)
         {
             _resizable = resizable;
             return *this;
         }
 
-        Builder& placement(WindowPlacement placement)
+        Builder& hidden(bool hidden)
         {
-            _placement = placement;
+            _hidden = hidden;
             return *this;
         }
 
@@ -160,6 +179,7 @@ public:
         uint32_t _height                  = 600;
         bool _resizable                   = false;
         WindowPlacement _placement        = DefaultWindowPlacement();
+        bool _hidden                      = false;
 
         // context
         std::string _name                           = "VxD-App";
