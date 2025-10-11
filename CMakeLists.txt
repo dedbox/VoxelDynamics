@@ -32,6 +32,15 @@ set(SDL_STATIC ON)
 
 FetchContent_MakeAvailable(SDL)
 
+# entt -------------------------------------------------------------------------
+
+FetchContent_Declare(
+  entt
+  GIT_REPOSITORY https://github.com/skypjack/entt.git
+  GIT_TAG v3.15.0
+  GIT_SHALLOW YES)
+
+FetchContent_MakeAvailable(entt)
 
 # spdlog -----------------------------------------------------------------------
 

@@ -7,7 +7,7 @@ add_library(
   src/VoxelDynamics/Core/Time.cpp src/VoxelDynamics/Core/Util.cpp
   src/VoxelDynamics/Renderer/Vulkan/Context.cpp)
 
-target_link_libraries(VoxelDynamics PUBLIC Vulkan::Vulkan SDL3::SDL3
+target_link_libraries(VoxelDynamics PUBLIC Vulkan::Vulkan SDL3::SDL3 EnTT::EnTT
                                            spdlog::spdlog)
 
 target_include_directories(VoxelDynamics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
