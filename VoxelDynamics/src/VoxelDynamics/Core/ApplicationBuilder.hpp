@@ -98,6 +98,12 @@ public:
         return *this;
     }
 
+    ApplicationBuilder& maxFramesInFlight(int maxFramesInFlight)
+    {
+        _maxFramesInFlight = maxFramesInFlight;
+        return *this;
+    }
+
     // =============================================================================================
 
 protected:
@@ -113,6 +119,7 @@ protected:
     std::string _name                           = "VxD-App";
     uint64_t _version                           = Version(1, 0, 0);
     vk::PhysicalDeviceType _preferredDeviceType = vk::PhysicalDeviceType::eDiscreteGpu;
+    int _maxFramesInFlight                      = 2;
 
     // application
     Log::Level _logLevel    = Log::Level::Info;

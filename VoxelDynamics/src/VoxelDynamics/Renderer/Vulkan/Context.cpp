@@ -801,4 +801,234 @@ Context::Pipeline Context::createGraphicsPipeline(const std::string& spvFilePath
     return Pipeline(std::move(pipelineLayout), std::move(graphicsPipeline));
 }
 
+// Frames //////////////////////////////////////////////////////////////////////////////////////////
+
+Context::Frames Context::createFrames() const
+{
+    std::vector<Frame> frames;
+    frames.reserve(buildInfo.maxFramesInFlight);
+
+    vk::CommandPoolCreateInfo poolCreateInfo(
+        vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+        _physicalDevice.graphicsQueueFamilyIndex);
+
+    for (const size_t i : std::ranges::views::iota(0, buildInfo.maxFramesInFlight))
+    {
+        // create command pool
+        vk::raii::CommandPool pool(*_device, poolCreateInfo);
+
+        // allocate command buffer from the pool
+        vk::CommandBufferAllocateInfo bufferAllocInfo(*pool, vk::CommandBufferLevel::ePrimary, 1);
+
+        vk::raii::CommandBuffer buffer =
+            std::move(_device->allocateCommandBuffers(bufferAllocInfo).front());
+
+        // create semaphores
+        vk::SemaphoreCreateInfo semaphoreCreateInfo{};
+        vk::raii::Semaphore imageAvailableSemaphore(*_device, semaphoreCreateInfo);
+        vk::raii::Semaphore renderFinishedSemaphore(*_device, semaphoreCreateInfo);
+
+        // create fence in signalled state
+        vk::FenceCreateInfo fenceCreateInfo(vk::FenceCreateFlagBits::eSignaled);
+        vk::raii::Fence inFlightFence(*_device, fenceCreateInfo);
+
+        frames.emplace_back(
+            std::move(pool),
+            std::move(buffer),
+            std::move(imageAvailableSemaphore),
+            std::move(renderFinishedSemaphore),
+            std::move(inFlightFence));
+    }
+
+    return Frames(std::move(frames), 0);
+}
+
+void Context::drawCurrentFrame(Frames& frames, Pipeline& pipeline)
+{
+    Frame& frame = frames.frames[frames.currentFrame];
+
+    // wait for the current frame to become available
+    while (vk::Result::eTimeout ==
+           _device->waitForFences(
+               *frame.inFlightFence, vk::True, std::numeric_limits<uint64_t>::max()))
+        ;
+    _device->resetFences(*frame.inFlightFence);
+
+    // acquire the next swap chain image
+    auto [result, imageIndex] = _swapChain->acquireNextImage(
+        std::numeric_limits<uint64_t>::max(), frame.imageAvailableSemaphore, nullptr);
+
+    if (result == vk::Result::eErrorOutOfDateKHR)
+    {
+        // TODO implement swap chain resizing
+        throw std::runtime_error("Swap chain resize not implemented yet");
+        return;
+    }
+    if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
+        throw std::runtime_error("Could not acquire the next swap chain image");
+
+    // reset the current command pool (and implicitly the command buffer)
+    frame.pool.reset();
+
+    // record the current command buffer
+    recordCommandBuffer(frame, imageIndex, pipeline);
+
+    // submit the command buffer
+    vk::PipelineStageFlags waitDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+
+    const vk::SubmitInfo submitInfo(
+        1,                                // wait semaphore count
+        &*frame.imageAvailableSemaphore,  // wait semaphores
+        &waitDstStageMask,                // wait destination stage mask
+        1,                                // command buffer count
+        &*frame.buffer,                   // command buffers
+        1,                                // signal semaphore count
+        &*frame.renderFinishedSemaphore); // signal semaphores
+
+    _device.graphicsQueue.submit(submitInfo, *frame.inFlightFence);
+
+    // present the image
+    const vk::PresentInfoKHR presentInfo(
+        1,                               // wait semaphore count
+        &*frame.renderFinishedSemaphore, // wait semaphores
+        1,                               // swap chain count
+        &**_swapChain,                   // swap chains
+        &imageIndex);                    // image indices
+
+    result = _device.graphicsQueue.presentKHR(presentInfo);
+
+    if (result == vk::Result::eErrorOutOfDateKHR ||
+        result == vk::Result::eSuboptimalKHR /* || frameBufferResized */)
+    {
+        /* frameBufferresized = false; recreateSwapChain */
+        throw std::runtime_error("Swap chain resize not implemented yet");
+    }
+    else if (result != vk::Result::eSuccess)
+        throw std::runtime_error("Could not present swap chain image");
+
+    // move to the next frame
+    frames.currentFrame = (frames.currentFrame + 1) % buildInfo.maxFramesInFlight;
+}
+
+void Context::recordCommandBuffer(Frame& frame, uint32_t imageIndex, Pipeline& pipeline)
+{
+    // begin recording
+    frame.buffer.begin({});
+
+    // transition swap chain image to color attachment layout
+    transitionImageLayout(
+        frame.buffer,
+        _swapChain.images[imageIndex],
+        vk::ImageLayout::eUndefined,                         // old layout
+        vk::ImageLayout::eColorAttachmentOptimal,            // new layout
+        {},                                                  // source aspect mask (no need to wait)
+        vk::AccessFlagBits2::eColorAttachmentWrite,          // destination aspect mask
+        vk::PipelineStageFlagBits2::eTopOfPipe,              // source stage mask
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput); // destination stage mask
+
+    // configure the color attachment
+    vk::ClearValue clearColor = vk::ClearColorValue(0.0F, 0.0F, 0.0F, 1.0F);
+    vk::RenderingAttachmentInfo attachmentInfo(
+        _swapChain.imageViews[imageIndex],        // image view
+        vk::ImageLayout::eColorAttachmentOptimal, // image layout
+        vk::ResolveModeFlagBits::eNone,           // resolve mode
+        {},                                       // resolve image view
+        vk::ImageLayout::eUndefined,              // resolve image layout
+        vk::AttachmentLoadOp::eClear,             // load operation
+        vk::AttachmentStoreOp::eStore,            // store operation
+        clearColor);                              // clear value
+
+    // configure dynamic rendering
+    vk::RenderingInfo renderingInfo(
+        {},
+        vk::Rect2D({0, 0}, _swapChain.extent), // render area
+        1,                                     // layer count
+        {},                                    // view mask
+        1,                                     // color attachment count
+        &attachmentInfo);                      // color attachments
+
+    // begin rendering
+    frame.buffer.beginRendering(renderingInfo);
+
+    // bind the graphics pipeline
+    frame.buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.graphics);
+
+    // supply dynamic rendering data
+    frame.buffer.setViewport(
+        0,
+        vk::Viewport(
+            0.0F,
+            0.0F,
+            static_cast<float>(_swapChain.extent.width),
+            static_cast<float>(_swapChain.extent.height),
+            0.0F,
+            1.0F));
+    frame.buffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), _swapChain.extent));
+
+    // issue draw commands
+    frame.buffer.draw(
+        3,  // vertex count
+        1,  // instance count
+        0,  // first vertex
+        0); // first instance
+
+    // end rendering
+    frame.buffer.endRendering();
+
+    // transition swap chain image to present layout
+    transitionImageLayout(
+        frame.buffer,
+        _swapChain.images[imageIndex],
+        vk::ImageLayout::eColorAttachmentOptimal,           // old layout
+        vk::ImageLayout::ePresentSrcKHR,                    // new layout
+        vk::AccessFlagBits2::eColorAttachmentWrite,         // source access mask
+        {},                                                 // destination access mask
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput, // source stage
+        vk::PipelineStageFlagBits2::eBottomOfPipe);         // destination stage
+
+    frame.buffer.end();
+}
+
+void Context::transitionImageLayout(
+    vk::raii::CommandBuffer& buffer,
+    vk::Image& image,
+    vk::ImageLayout oldLayout,
+    vk::ImageLayout newLayout,
+    vk::AccessFlags2 srcAccessMask,
+    vk::AccessFlags2 dstAccessMask,
+    vk::PipelineStageFlags2 srcStageMask,
+    vk::PipelineStageFlags2 dstStageMask)
+{
+vk:
+    vk::ImageSubresourceRange subresourceRange(
+        vk::ImageAspectFlagBits::eColor, // aspect mask
+        0,                               // base mip level
+        1,                               // level count
+        0,                               // base array layer
+        1);                              // layer count
+
+    vk::ImageMemoryBarrier2 barrier(
+        srcStageMask,
+        srcAccessMask,
+        dstStageMask,
+        dstAccessMask,
+        oldLayout,
+        newLayout,
+        vk::QueueFamilyIgnored, // source queue family index
+        vk::QueueFamilyIgnored, // destination queue family index
+        image,
+        subresourceRange);
+
+    vk::DependencyInfo dependencyInfo(
+        {},
+        {},        // memory barrier count
+        {},        // memory barriers
+        {},        // buffer memory barrier count
+        {},        // buffer memory barriers
+        1,         // image memory barrier count
+        &barrier); // image memory barriers
+
+    buffer.pipelineBarrier2(dependencyInfo);
+}
+
 } // namespace VoxelDynamics::Vulkan

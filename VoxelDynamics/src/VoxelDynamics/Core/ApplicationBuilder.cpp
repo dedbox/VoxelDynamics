@@ -12,6 +12,7 @@ const Application::BuildInfo ApplicationBuilder::GetBuildInfo() const
                 .appName             = _name,
                 .appVersion          = _version,
                 .preferredDeviceType = _preferredDeviceType,
+                .maxFramesInFlight   = _maxFramesInFlight,
             },
         // window
         .title     = _title.value_or(_name),

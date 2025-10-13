@@ -15,6 +15,7 @@ public:
         std::string appName;
         uint64_t appVersion;
         vk::PhysicalDeviceType preferredDeviceType;
+        int maxFramesInFlight;
     } buildInfo;
 
     Context(SDL_Window* window, const BuildInfo& buildInfo);
@@ -38,6 +39,39 @@ public:
     };
 
     Pipeline createGraphicsPipeline(const std::string& spvFilePath) const;
+
+    // Frames //////////////////////////////////////////////////////////////////////////////////////
+
+    struct Frame
+    {
+        vk::raii::CommandPool pool;
+        vk::raii::CommandBuffer buffer;
+        vk::raii::Semaphore imageAvailableSemaphore;
+        vk::raii::Semaphore renderFinishedSemaphore;
+        vk::raii::Fence inFlightFence;
+    };
+
+    struct Frames
+    {
+        std::vector<Frame> frames;
+        size_t currentFrame;
+    };
+
+    Frames createFrames() const;
+    void drawCurrentFrame(Frames& frames, Pipeline& pipeline);
+    void recordCommandBuffer(Frame& frame, uint32_t imageIndex, Pipeline& pipeline);
+
+    void transitionImageLayout(
+        vk::raii::CommandBuffer& buffer,
+        vk::Image& image,
+        vk::ImageLayout oldLayout,
+        vk::ImageLayout newLayout,
+        vk::AccessFlags2 srcAccessMask,
+        vk::AccessFlags2 dstAccessMask,
+        vk::PipelineStageFlags2 srcStageMask,
+        vk::PipelineStageFlags2 dstStageMask);
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////
 
 private:
     using FeaturesChain = vk::StructureChain<
@@ -90,6 +124,14 @@ private:
         vk::SurfaceFormatKHR surfaceFormat;
         vk::Extent2D extent;
         std::vector<vk::raii::ImageView> imageViews;
+
+        // dereference operator gives access to the underlying Vulkan object
+        vk::raii::SwapchainKHR& operator*() { return swapChain; }
+        const vk::raii::SwapchainKHR& operator*() const { return swapChain; }
+
+        // arrow operator gives access to members of the underlying Vulkan object
+        vk::raii::SwapchainKHR* operator->() { return &swapChain; }
+        const vk::raii::SwapchainKHR* operator->() const { return &swapChain; }
     } _swapChain;
 
     // Instance ////////////////////////////////////////////////////////////////////////////////////

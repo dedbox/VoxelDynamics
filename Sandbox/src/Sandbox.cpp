@@ -10,6 +10,7 @@ public:
     explicit SandboxApp(const Application::BuildInfo& buildInfo)
         : Application(buildInfo)
         , _pipeline(_context.createGraphicsPipeline("shaders/slang.slang.spv"))
+        , _frames(_context.createFrames())
     {
         // connect event listeners
         Event::Bus::Connect<Event::WindowClose, &SandboxApp::onClose>(this);
@@ -42,8 +43,11 @@ public:
             "unhandled KeyDown event: {}{}", keyName, event.repeat ? " (repeat)" : "");
     }
 
+    void onUpdate(double /*deltaTime*/) override { _context.drawCurrentFrame(_frames, _pipeline); }
+
 private:
     Vulkan::Context::Pipeline _pipeline;
+    Vulkan::Context::Frames _frames;
 };
 
 // Sandbox App Builder /////////////////////////////////////////////////////////////////////////////
