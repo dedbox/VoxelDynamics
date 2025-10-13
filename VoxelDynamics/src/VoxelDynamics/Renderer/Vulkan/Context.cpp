@@ -17,6 +17,11 @@ Context::Context(SDL_Window* window, const BuildInfo& buildInfo_) // NOLINT
 {
 }
 
+void Context::wait() const
+{
+    _device->waitIdle();
+}
+
 // Instance ////////////////////////////////////////////////////////////////////////////////////////
 
 vk::raii::Instance Context::createInstance() const
@@ -496,6 +501,16 @@ Context::Device Context::createDevice() const
         vk::DebugUtilsObjectNameInfoEXT(
             vk::ObjectType::eDevice, reinterpret_cast<uint64_t>(&**device), "Vulkan Device"));
 
+    device.setDebugUtilsObjectNameEXT(
+        vk::DebugUtilsObjectNameInfoEXT(
+            vk::ObjectType::eQueue,
+            reinterpret_cast<uint64_t>(&**graphicsQueue),
+            "Graphics Queue"));
+
+    device.setDebugUtilsObjectNameEXT(
+        vk::DebugUtilsObjectNameInfoEXT(
+            vk::ObjectType::eQueue, reinterpret_cast<uint64_t>(&**presentQueue), "Present Queue"));
+
     Log::Core::Info("Logical device created");
 
     return Device(std::move(device), std::move(graphicsQueue), std::move(presentQueue));
@@ -639,6 +654,7 @@ Context::SwapChain Context::createSwapChain(SDL_Window* window) const
 
     // create a view of each image in the swap chain
     std::vector<vk::raii::ImageView> imageViews;
+    imageViews.reserve(images.size());
     for (const auto& [i, image] : std::ranges::views::enumerate(images))
     {
         setDebugName(
@@ -662,12 +678,34 @@ Context::SwapChain Context::createSwapChain(SDL_Window* window) const
             std::format("SwapChain Image View {}", i));
     }
 
+    // create a semaphore for each image in the swap chain
+    std::vector<vk::raii::Semaphore> imageAvailableSemaphores;
+    imageAvailableSemaphores.reserve(images.size());
+
+    vk::SemaphoreCreateInfo semaphoreCreateInfo{};
+
+    for (const auto i : std::ranges::views::iota(0U, images.size()))
+    {
+        imageAvailableSemaphores.emplace_back(*_device, semaphoreCreateInfo);
+
+        setDebugName(
+            vk::ObjectType::eSemaphore,
+            reinterpret_cast<uint64_t>(&**imageAvailableSemaphores[i]),
+            std::format("Image Available Semaphore {}", i));
+    }
+
     Log::Core::Info("Swap chain created:");
     Log::Core::Info("  number of swap chain images: {}", imageCount);
     Log::Core::Info("  chosen format: {}", SurfaceFormatName(surfaceFormat));
     Log::Core::Info("  present mode: {}", vk::to_string(presentMode));
 
-    return SwapChain(std::move(swapChain), images, surfaceFormat, extent, std::move(imageViews));
+    return SwapChain(
+        std::move(swapChain),
+        images,
+        surfaceFormat,
+        extent,
+        std::move(imageViews),
+        std::move(imageAvailableSemaphores));
 }
 
 // Pipeline ////////////////////////////////////////////////////////////////////////////////////////
@@ -692,6 +730,11 @@ Context::Pipeline Context::createGraphicsPipeline(const std::string& spvFilePath
         vk::PipelineShaderStageCreateInfo(
             {}, vk::ShaderStageFlagBits::eFragment, shaderModule, "fragMain"),
     };
+
+    setDebugName(
+        vk::ObjectType::eShaderModule,
+        reinterpret_cast<uint64_t>(&**shaderModule),
+        "Shader Module");
 
     Log::Core::Info("Loaded SPIR-V bytecode file `{}'", spvFilePath);
 
@@ -768,6 +811,11 @@ Context::Pipeline Context::createGraphicsPipeline(const std::string& spvFilePath
 
     vk::raii::PipelineLayout pipelineLayout(*_device, pipelineLayoutInfo);
 
+    setDebugName(
+        vk::ObjectType::ePipelineLayout,
+        reinterpret_cast<uint64_t>(&**pipelineLayout),
+        "Pipeline Layout");
+
     // create the graphics pipeline
     vk::PipelineRenderingCreateInfo pipelineRenderingInfo(
         {},                                // view mask
@@ -796,6 +844,11 @@ Context::Pipeline Context::createGraphicsPipeline(const std::string& spvFilePath
 
     vk::raii::Pipeline graphicsPipeline(*_device, nullptr, pipelineInfo);
 
+    setDebugName(
+        vk::ObjectType::ePipeline,
+        reinterpret_cast<uint64_t>(&**graphicsPipeline),
+        "Graphics Pipeline");
+
     Log::Core::Info("Shader pipeline created");
 
     return Pipeline(std::move(pipelineLayout), std::move(graphicsPipeline));
@@ -812,10 +865,17 @@ Context::Frames Context::createFrames() const
         vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
         _physicalDevice.graphicsQueueFamilyIndex);
 
+    vk::SemaphoreCreateInfo semaphoreCreateInfo{};
+
     for (const size_t i : std::ranges::views::iota(0, buildInfo.maxFramesInFlight))
     {
         // create command pool
         vk::raii::CommandPool pool(*_device, poolCreateInfo);
+
+        setDebugName(
+            vk::ObjectType::eCommandPool,
+            reinterpret_cast<uint64_t>(&**pool),
+            std::format("Command Pool {}", i));
 
         // allocate command buffer from the pool
         vk::CommandBufferAllocateInfo bufferAllocInfo(*pool, vk::CommandBufferLevel::ePrimary, 1);
@@ -823,24 +883,48 @@ Context::Frames Context::createFrames() const
         vk::raii::CommandBuffer buffer =
             std::move(_device->allocateCommandBuffers(bufferAllocInfo).front());
 
-        // create semaphores
-        vk::SemaphoreCreateInfo semaphoreCreateInfo{};
-        vk::raii::Semaphore imageAvailableSemaphore(*_device, semaphoreCreateInfo);
-        vk::raii::Semaphore renderFinishedSemaphore(*_device, semaphoreCreateInfo);
+        setDebugName(
+            vk::ObjectType::eCommandBuffer,
+            reinterpret_cast<uint64_t>(&**buffer),
+            std::format("Command Buffer {}", i));
+
+        // create semaphore
+        vk::raii::Semaphore renderFinishSemaphore(*_device, semaphoreCreateInfo);
+
+        setDebugName(
+            vk::ObjectType::eSemaphore,
+            reinterpret_cast<uint64_t>(&**renderFinishSemaphore),
+            std::format("Render Finish Semaphore {}", i));
 
         // create fence in signalled state
         vk::FenceCreateInfo fenceCreateInfo(vk::FenceCreateFlagBits::eSignaled);
         vk::raii::Fence inFlightFence(*_device, fenceCreateInfo);
 
+        setDebugName(
+            vk::ObjectType::eFence,
+            reinterpret_cast<uint64_t>(&**inFlightFence),
+            std::format("In Flight Fence {}", i));
+
         frames.emplace_back(
             std::move(pool),
             std::move(buffer),
-            std::move(imageAvailableSemaphore),
-            std::move(renderFinishedSemaphore),
+            std::move(renderFinishSemaphore),
             std::move(inFlightFence));
     }
 
     return Frames(std::move(frames), 0);
+}
+
+void Context::destroyFrames(Frames& frames) const
+{
+    const auto fences = frames.frames |
+                        std::ranges::views::transform(
+                            [](const auto& frame) -> vk::Fence { return *frame.inFlightFence; }) |
+                        std::ranges::to<std::vector>();
+
+    if (_device->waitForFences(fences, vk::True, std::numeric_limits<uint64_t>::max()) !=
+        vk::Result::eSuccess)
+        throw std::runtime_error("Failed ot wait for Vulkan fences");
 }
 
 void Context::drawCurrentFrame(Frames& frames, Pipeline& pipeline)
@@ -852,11 +936,12 @@ void Context::drawCurrentFrame(Frames& frames, Pipeline& pipeline)
            _device->waitForFences(
                *frame.inFlightFence, vk::True, std::numeric_limits<uint64_t>::max()))
         ;
-    _device->resetFences(*frame.inFlightFence);
 
     // acquire the next swap chain image
     auto [result, imageIndex] = _swapChain->acquireNextImage(
         std::numeric_limits<uint64_t>::max(), frame.imageAvailableSemaphore, nullptr);
+
+    Log::Core::Trace("acquired swap chain image {}", imageIndex);
 
     if (result == vk::Result::eErrorOutOfDateKHR)
     {
@@ -873,27 +958,29 @@ void Context::drawCurrentFrame(Frames& frames, Pipeline& pipeline)
     // record the current command buffer
     recordCommandBuffer(frame, imageIndex, pipeline);
 
+    _device->resetFences(*frame.inFlightFence);
+
     // submit the command buffer
     vk::PipelineStageFlags waitDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 
     const vk::SubmitInfo submitInfo(
-        1,                                // wait semaphore count
-        &*frame.imageAvailableSemaphore,  // wait semaphores
-        &waitDstStageMask,                // wait destination stage mask
-        1,                                // command buffer count
-        &*frame.buffer,                   // command buffers
-        1,                                // signal semaphore count
-        &*frame.renderFinishedSemaphore); // signal semaphores
+        1,                                                  // wait semaphore count
+        &*frame.imageAvailableSemaphore,                    // wait semaphores
+        &waitDstStageMask,                                  // wait destination stage mask
+        1,                                                  // command buffer count
+        &*frame.buffer,                                     // command buffers
+        1,                                                  // signal semaphore count
+        &*_swapChain.renderFinishedSemaphores[imageIndex]); // signal semaphores
 
     _device.graphicsQueue.submit(submitInfo, *frame.inFlightFence);
 
     // present the image
     const vk::PresentInfoKHR presentInfo(
-        1,                               // wait semaphore count
-        &*frame.renderFinishedSemaphore, // wait semaphores
-        1,                               // swap chain count
-        &**_swapChain,                   // swap chains
-        &imageIndex);                    // image indices
+        1,                                                 // wait semaphore count
+        &*_swapChain.renderFinishedSemaphores[imageIndex], // wait semaphores
+        1,                                                 // swap chain count
+        &**_swapChain,                                     // swap chains
+        &imageIndex);                                      // image indices
 
     result = _device.graphicsQueue.presentKHR(presentInfo);
 

@@ -30,6 +30,8 @@ public:
     Context(const Context&)            = delete;
     Context& operator=(const Context&) = delete;
 
+    void wait() const;
+
     // Pipeline ////////////////////////////////////////////////////////////////////////////////////
 
     struct Pipeline
@@ -47,7 +49,6 @@ public:
         vk::raii::CommandPool pool;
         vk::raii::CommandBuffer buffer;
         vk::raii::Semaphore imageAvailableSemaphore;
-        vk::raii::Semaphore renderFinishedSemaphore;
         vk::raii::Fence inFlightFence;
     };
 
@@ -58,6 +59,8 @@ public:
     };
 
     Frames createFrames() const;
+    void destroyFrames(Frames& frames) const;
+
     void drawCurrentFrame(Frames& frames, Pipeline& pipeline);
     void recordCommandBuffer(Frame& frame, uint32_t imageIndex, Pipeline& pipeline);
 
@@ -124,6 +127,7 @@ private:
         vk::SurfaceFormatKHR surfaceFormat;
         vk::Extent2D extent;
         std::vector<vk::raii::ImageView> imageViews;
+        std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
 
         // dereference operator gives access to the underlying Vulkan object
         vk::raii::SwapchainKHR& operator*() { return swapChain; }

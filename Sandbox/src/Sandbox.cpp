@@ -19,6 +19,8 @@ public:
         showWindow();
     }
 
+    ~SandboxApp() override { _context.wait(); }
+
     void onClose() { quit(); }
 
     void onKeyDown(const VoxelDynamics::Event::KeyDown& event)
