@@ -13,7 +13,8 @@ add_library(
 target_link_libraries(VoxelDynamics PUBLIC Vulkan::Vulkan SDL3::SDL3 EnTT::EnTT
                                            spdlog::spdlog)
 
-target_include_directories(VoxelDynamics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_include_directories(VoxelDynamics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src
+                                                ${glm_SOURCE_DIR})
 
 # Compile-time Options #########################################################
 
