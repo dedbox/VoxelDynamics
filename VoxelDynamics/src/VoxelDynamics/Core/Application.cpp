@@ -146,6 +146,13 @@ void Application::handleSdlEvent(SDL_Event* event)
         Event::Bus::Trigger<Event::WindowClose>();
         break;
 
+    case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
+        int width = 0, height = 0;
+        SDL_GetWindowSizeInPixels(_window, &width, &height);
+        Event::Bus::Trigger<Event::WindowResuze>(width, height);
+        break;
+    }
+
     case SDL_EVENT_KEY_DOWN:
         Event::Bus::Trigger<Event::KeyDown>(event->key.key, event->key.repeat);
         break;

@@ -14,6 +14,7 @@ public:
     {
         // connect event listeners
         Event::Bus::Connect<Event::WindowClose, &SandboxApp::onClose>(this);
+        Event::Bus::Connect<Event::WindowResuze, &SandboxApp::onResize>(this);
         Event::Bus::Connect<Event::KeyDown, &SandboxApp::onKeyDown>(this);
 
         showWindow();
@@ -21,11 +22,24 @@ public:
 
     ~SandboxApp() override { _context.wait(); }
 
+    // prevent copying
+    SandboxApp(const SandboxApp&)            = delete;
+    SandboxApp& operator=(const SandboxApp&) = delete;
+
+    // prevent moving
+    SandboxApp(SandboxApp&&)            = delete;
+    SandboxApp& operator=(SandboxApp&&) = delete;
+
     void onClose() { quit(); }
+
+    void onResize(const Event::WindowResuze& event)
+    {
+        Log::Info("Window resize event: {}x{}", event.width, event.height);
+        _context.requestResize();
+    }
 
     void onKeyDown(const VoxelDynamics::Event::KeyDown& event)
     {
-
         switch (event.key)
         {
         case SDLK_ESCAPE:
@@ -45,7 +59,10 @@ public:
             "unhandled KeyDown event: {}{}", keyName, event.repeat ? " (repeat)" : "");
     }
 
-    void onUpdate(double /*deltaTime*/) override { _context.drawCurrentFrame(_frames, _pipeline); }
+    void onUpdate(double /*deltaTime*/) override
+    {
+        _context.drawCurrentFrame(_window, _frames, _pipeline);
+    }
 
 private:
     Vulkan::Context::Pipeline _pipeline;
@@ -62,6 +79,7 @@ public:
         _name      = "Sandbox";
         _placement = VoxelDynamics::CenteredWindowPlacement();
         _hidden    = true;
+        _resizable = true;
         _logLevel  = VoxelDynamics::Log::Level::Debug;
     }
 

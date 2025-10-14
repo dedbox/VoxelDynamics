@@ -73,10 +73,8 @@ public:
 
     void handleSdlEvent(SDL_Event* event);
 
-private:
-    SDL_Window* _window;
-
 protected:
+    SDL_Window* _window;
     Vulkan::Context _context;
 
 private:

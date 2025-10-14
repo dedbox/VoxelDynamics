@@ -11,6 +11,12 @@ struct WindowClose
 {
 };
 
+struct WindowResuze
+{
+    uint32_t width;
+    uint32_t height;
+};
+
 // Keyboard ////////////////////////////////////////////////////////////////////////////////////////
 
 struct KeyDown

@@ -1,5 +1,6 @@
 #include "VoxelDynamics/Renderer/Vulkan/Context.hpp"
 
+#include "SDL3/SDL_events.h"
 #include "SDL3/SDL_vulkan.h"
 
 #include "VoxelDynamics/Core/Util.hpp"
@@ -20,6 +21,13 @@ Context::Context(SDL_Window* window, const BuildInfo& buildInfo_) // NOLINT
 void Context::wait() const
 {
     _device->waitIdle();
+}
+
+void Context::recreateSwapChain(SDL_Window* window)
+{
+    wait();
+    cleanupSwapChain();
+    _swapChain = createSwapChain(window);
 }
 
 // Instance ////////////////////////////////////////////////////////////////////////////////////////
@@ -529,6 +537,7 @@ Context::SwapChain Context::createSwapChain(SDL_Window* window) const
         if (caps.currentExtent.width != 0xFFFFFFFF)
             return caps.currentExtent;
 
+        // TODO do we need to handle window minimize separately?
         int width = 0, height = 0;
         if (!SDL_GetWindowSizeInPixels(window, &width, &height))
             throw SDLException("Could not determine window size");
@@ -927,7 +936,7 @@ void Context::destroyFrames(Frames& frames) const
         throw std::runtime_error("Failed ot wait for Vulkan fences");
 }
 
-void Context::drawCurrentFrame(Frames& frames, Pipeline& pipeline)
+void Context::drawCurrentFrame(SDL_Window* window, Frames& frames, Pipeline& pipeline)
 {
     Frame& frame = frames.frames[frames.currentFrame];
 
@@ -938,27 +947,37 @@ void Context::drawCurrentFrame(Frames& frames, Pipeline& pipeline)
         ;
 
     // acquire the next swap chain image
-    auto [result, imageIndex] = _swapChain->acquireNextImage(
-        std::numeric_limits<uint64_t>::max(), frame.imageAvailableSemaphore, nullptr);
-
-    Log::Core::Trace("acquired swap chain image {}", imageIndex);
+    vk::Result result{};
+    uint32_t imageIndex{};
+    try
+    {
+        std::tie(result, imageIndex) = _swapChain->acquireNextImage(
+            std::numeric_limits<uint64_t>::max(), frame.imageAvailableSemaphore, nullptr);
+    }
+    catch (const vk::OutOfDateKHRError& e)
+    {
+        recreateSwapChain(window);
+        return;
+    }
 
     if (result == vk::Result::eErrorOutOfDateKHR)
     {
-        // TODO implement swap chain resizing
-        throw std::runtime_error("Swap chain resize not implemented yet");
+        recreateSwapChain(window);
         return;
     }
     if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
         throw std::runtime_error("Could not acquire the next swap chain image");
+
+    Log::Core::Trace("acquired swap chain image {}", imageIndex);
+
+    // reset fences (now that we know we will be submitting work with it)
+    _device->resetFences(*frame.inFlightFence);
 
     // reset the current command pool (and implicitly the command buffer)
     frame.pool.reset();
 
     // record the current command buffer
     recordCommandBuffer(frame, imageIndex, pipeline);
-
-    _device->resetFences(*frame.inFlightFence);
 
     // submit the command buffer
     vk::PipelineStageFlags waitDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
@@ -982,13 +1001,19 @@ void Context::drawCurrentFrame(Frames& frames, Pipeline& pipeline)
         &**_swapChain,                                     // swap chains
         &imageIndex);                                      // image indices
 
-    result = _device.graphicsQueue.presentKHR(presentInfo);
-
-    if (result == vk::Result::eErrorOutOfDateKHR ||
-        result == vk::Result::eSuboptimalKHR /* || frameBufferResized */)
+    try
     {
-        /* frameBufferresized = false; recreateSwapChain */
-        throw std::runtime_error("Swap chain resize not implemented yet");
+        result = _device.graphicsQueue.presentKHR(presentInfo);
+    }
+    catch (const vk::OutOfDateKHRError& e)
+    {
+        recreateSwapChain(window);
+    }
+
+    if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR ||
+        _swapChain.frameBufferResized)
+    {
+        recreateSwapChain(window);
     }
     else if (result != vk::Result::eSuccess)
         throw std::runtime_error("Could not present swap chain image");
@@ -1116,6 +1141,18 @@ vk:
         &barrier); // image memory barriers
 
     buffer.pipelineBarrier2(dependencyInfo);
+}
+
+void Context::cleanupSwapChain()
+{
+    _swapChain.renderFinishedSemaphores.clear();
+    _swapChain.imageViews.clear();
+    _swapChain.swapChain = nullptr;
+}
+
+void Context::requestResize()
+{
+    _swapChain.frameBufferResized = true;
 }
 
 } // namespace VoxelDynamics::Vulkan

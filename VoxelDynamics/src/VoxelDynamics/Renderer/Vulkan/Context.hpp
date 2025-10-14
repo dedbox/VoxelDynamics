@@ -31,6 +31,7 @@ public:
     Context& operator=(const Context&) = delete;
 
     void wait() const;
+    void recreateSwapChain(SDL_Window* window);
 
     // Pipeline ////////////////////////////////////////////////////////////////////////////////////
 
@@ -61,7 +62,7 @@ public:
     Frames createFrames() const;
     void destroyFrames(Frames& frames) const;
 
-    void drawCurrentFrame(Frames& frames, Pipeline& pipeline);
+    void drawCurrentFrame(SDL_Window* window, Frames& frames, Pipeline& pipeline);
     void recordCommandBuffer(Frame& frame, uint32_t imageIndex, Pipeline& pipeline);
 
     void transitionImageLayout(
@@ -73,6 +74,8 @@ public:
         vk::AccessFlags2 dstAccessMask,
         vk::PipelineStageFlags2 srcStageMask,
         vk::PipelineStageFlags2 dstStageMask);
+
+    void requestResize();
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -128,6 +131,7 @@ private:
         vk::Extent2D extent;
         std::vector<vk::raii::ImageView> imageViews;
         std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
+        bool frameBufferResized = false;
 
         // dereference operator gives access to the underlying Vulkan object
         vk::raii::SwapchainKHR& operator*() { return swapChain; }
@@ -188,6 +192,7 @@ private:
     // Swap Chain //////////////////////////////////////////////////////////////////////////////////
 
     SwapChain createSwapChain(SDL_Window* window) const;
+    void cleanupSwapChain();
 };
 
 } // namespace VoxelDynamics::Vulkan
