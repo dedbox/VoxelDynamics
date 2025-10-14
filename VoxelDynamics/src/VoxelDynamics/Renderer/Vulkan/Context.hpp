@@ -41,7 +41,10 @@ public:
         vk::raii::Pipeline graphics;
     };
 
-    Pipeline createGraphicsPipeline(const std::string& spvFilePath) const;
+    Pipeline createGraphicsPipeline(
+        const std::string& spvFilePath,
+        const vk::VertexInputBindingDescription& vertexBindingDescription,
+        std::span<const vk::VertexInputAttributeDescription> vertexAttributeDescriptions) const;
 
     // Frames //////////////////////////////////////////////////////////////////////////////////////
 
@@ -62,8 +65,12 @@ public:
     Frames createFrames() const;
     void destroyFrames(Frames& frames) const;
 
-    void drawCurrentFrame(SDL_Window* window, Frames& frames, Pipeline& pipeline);
-    void recordCommandBuffer(Frame& frame, uint32_t imageIndex, Pipeline& pipeline);
+    struct VertexBuffer;
+
+    void drawCurrentFrame(
+        SDL_Window* window, Frames& frames, Pipeline& pipeline, VertexBuffer& vertexBuffer);
+    void recordCommandBuffer(
+        Frame& frame, uint32_t imageIndex, Pipeline& pipeline, VertexBuffer& vertexBuffer);
 
     void transitionImageLayout(
         vk::raii::CommandBuffer& buffer,
@@ -76,6 +83,76 @@ public:
         vk::PipelineStageFlags2 dstStageMask);
 
     void requestResize();
+
+    // Vertex Buffer ///////////////////////////////////////////////////////////////////////////////
+
+    struct VertexBuffer
+    {
+        vk::raii::Buffer buffer;
+        vk::raii::DeviceMemory memory;
+        uint32_t count;
+
+        // dereference operator gives access to the underlying Vulkan object
+        vk::raii::Buffer& operator*() { return buffer; }
+        const vk::raii::Buffer& operator*() const { return buffer; }
+    };
+
+    template <typename R>
+        requires std::ranges::contiguous_range<R> && std::ranges::sized_range<R>
+    VertexBuffer createVertexBuffer(const R& vertices) const
+    {
+        using T = std::ranges::range_value_t<R>;
+
+        // create vertex buffer
+        vk::BufferCreateInfo createInfo(
+            {},
+            static_cast<vk::DeviceSize>(std::ranges::size(vertices) * sizeof(T)),
+            vk::BufferUsageFlagBits::eVertexBuffer,
+            vk::SharingMode::eExclusive);
+
+        vk::raii::Buffer buffer(*_device, createInfo);
+
+        setDebugName(
+            vk::ObjectType::eBuffer, reinterpret_cast<uint64_t>(&**buffer), "Vertex Buffer");
+
+        // allocate buffer memory
+        const auto memReqs = buffer.getMemoryRequirements();
+        const auto memType = findMemoryType(
+            memReqs.memoryTypeBits,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+        vk::MemoryAllocateInfo allocInfo(memReqs.size, memType);
+
+        vk::raii::DeviceMemory memory(*_device, allocInfo);
+
+        setDebugName(
+            vk::ObjectType::eDeviceMemory,
+            reinterpret_cast<uint64_t>(&**memory),
+            "Vertex Buffer Memory");
+
+        // associate this memory with the buffer
+        buffer.bindMemory(*memory, 0);
+
+        // copy vertex data to the buffer
+        void* data = memory.mapMemory(0, createInfo.size);
+        memcpy(data, std::ranges::data(vertices), createInfo.size);
+        memory.unmapMemory();
+
+        return VertexBuffer(std::move(buffer), std::move(memory), std::ranges::size(vertices));
+    }
+
+    uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const
+    {
+        // query available memory types
+        vk::PhysicalDeviceMemoryProperties memProps = _physicalDevice->getMemoryProperties();
+
+        // find a suitable type
+        for (const auto& [i, memType] : std::ranges::views::enumerate(memProps.memoryTypes))
+            if ((typeFilter * (1U << static_cast<uint32_t>(i))) &&
+                (memType.propertyFlags & properties) == properties)
+                return i;
+
+        throw std::runtime_error("Could not find a suitable memory type");
+    }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 

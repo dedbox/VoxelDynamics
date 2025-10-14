@@ -1,6 +1,5 @@
 #include "VoxelDynamics/Renderer/Vulkan/Context.hpp"
 
-#include "SDL3/SDL_events.h"
 #include "SDL3/SDL_vulkan.h"
 
 #include "VoxelDynamics/Core/Util.hpp"
@@ -719,7 +718,10 @@ Context::SwapChain Context::createSwapChain(SDL_Window* window) const
 
 // Pipeline ////////////////////////////////////////////////////////////////////////////////////////
 
-Context::Pipeline Context::createGraphicsPipeline(const std::string& spvFilePath) const
+Context::Pipeline Context::createGraphicsPipeline(
+    const std::string& spvFilePath,
+    const vk::VertexInputBindingDescription& vertexBindingDescription,
+    std::span<const vk::VertexInputAttributeDescription> vertexAttributeDescriptions) const
 {
     // load SPIR-V file
     const std::vector<char> code = readFile(spvFilePath);
@@ -748,7 +750,12 @@ Context::Pipeline Context::createGraphicsPipeline(const std::string& spvFilePath
     Log::Core::Info("Loaded SPIR-V bytecode file `{}'", spvFilePath);
 
     // describe vertex data format
-    vk::PipelineVertexInputStateCreateInfo vertexInputInfo;
+    vk::PipelineVertexInputStateCreateInfo vertexInputInfo(
+        {},
+        1,
+        &vertexBindingDescription,
+        vertexAttributeDescriptions.size(),
+        vertexAttributeDescriptions.data());
 
     // set drawing primitive type
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly(
@@ -936,7 +943,8 @@ void Context::destroyFrames(Frames& frames) const
         throw std::runtime_error("Failed ot wait for Vulkan fences");
 }
 
-void Context::drawCurrentFrame(SDL_Window* window, Frames& frames, Pipeline& pipeline)
+void Context::drawCurrentFrame(
+    SDL_Window* window, Frames& frames, Pipeline& pipeline, VertexBuffer& vertexBuffer)
 {
     Frame& frame = frames.frames[frames.currentFrame];
 
@@ -977,7 +985,7 @@ void Context::drawCurrentFrame(SDL_Window* window, Frames& frames, Pipeline& pip
     frame.pool.reset();
 
     // record the current command buffer
-    recordCommandBuffer(frame, imageIndex, pipeline);
+    recordCommandBuffer(frame, imageIndex, pipeline, vertexBuffer);
 
     // submit the command buffer
     vk::PipelineStageFlags waitDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
@@ -1022,7 +1030,8 @@ void Context::drawCurrentFrame(SDL_Window* window, Frames& frames, Pipeline& pip
     frames.currentFrame = (frames.currentFrame + 1) % buildInfo.maxFramesInFlight;
 }
 
-void Context::recordCommandBuffer(Frame& frame, uint32_t imageIndex, Pipeline& pipeline)
+void Context::recordCommandBuffer(
+    Frame& frame, uint32_t imageIndex, Pipeline& pipeline, VertexBuffer& vertexBuffer)
 {
     // begin recording
     frame.buffer.begin({});
@@ -1077,12 +1086,18 @@ void Context::recordCommandBuffer(Frame& frame, uint32_t imageIndex, Pipeline& p
             1.0F));
     frame.buffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), _swapChain.extent));
 
+    // bind vertex data
+    frame.buffer.bindVertexBuffers(
+        0,              // first binding
+        **vertexBuffer, // buffer
+        {0});           // offsets
+
     // issue draw commands
     frame.buffer.draw(
-        3,  // vertex count
-        1,  // instance count
-        0,  // first vertex
-        0); // first instance
+        vertexBuffer.count, // vertex count
+        1,                  // instance count
+        0,                  // first vertex
+        0);                 // first instance
 
     // end rendering
     frame.buffer.endRendering();

@@ -1,22 +1,63 @@
 #include <VoxelDynamics.hpp>
 
+#include "glm/ext/vector_float2.hpp"
+#include "glm/ext/vector_float3.hpp"
+
 // Sandbox App /////////////////////////////////////////////////////////////////////////////////////
 
 using namespace VoxelDynamics;
 
+struct Vertex
+{
+    glm::vec2 position;
+    glm::vec3 color;
+
+    static vk::VertexInputBindingDescription getBindingDescription()
+    {
+        return vk::VertexInputBindingDescription(
+            0,                             // binding index
+            sizeof(Vertex),                // stride
+            vk::VertexInputRate::eVertex); // input rate
+    }
+
+    static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions()
+    {
+        return {
+            vk::VertexInputAttributeDescription(
+                0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, position)),
+            vk::VertexInputAttributeDescription(
+                1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)),
+        };
+    }
+};
+
 class SandboxApp : public Application
 {
+private:
+    const std::vector<Vertex> _vertices = {
+        // clang-format off
+            {.position = { 0.0F, -0.5F}, .color = {1.0F, 0.0F, 0.0F}},
+            {.position = { 0.5F,  0.5F}, .color = {0.0F, 1.0F, 0.0F}},
+            {.position = {-0.5F,  0.5F}, .color = {0.0F, 0.0F, 1.0F}},
+        // clang-format on
+    };
+
 public:
     explicit SandboxApp(const Application::BuildInfo& buildInfo)
         : Application(buildInfo)
-        , _pipeline(_context.createGraphicsPipeline("shaders/slang.slang.spv"))
+        , _pipeline(_context.createGraphicsPipeline(
+              "shaders/slang.slang.spv",
+              Vertex::getBindingDescription(),
+              Vertex::getAttributeDescriptions()))
         , _frames(_context.createFrames())
+        , _vertexBuffer(_context.createVertexBuffer(_vertices))
     {
         // connect event listeners
         Event::Bus::Connect<Event::WindowClose, &SandboxApp::onClose>(this);
         Event::Bus::Connect<Event::WindowResuze, &SandboxApp::onResize>(this);
         Event::Bus::Connect<Event::KeyDown, &SandboxApp::onKeyDown>(this);
 
+        // ready to run
         showWindow();
     }
 
@@ -35,7 +76,9 @@ public:
     void onResize(const Event::WindowResuze& event)
     {
         Log::Info("Window resize event: {}x{}", event.width, event.height);
-        _context.requestResize();
+        const auto& [width, height] = getWWindowSize();
+        if (width != event.width || height != event.height)
+            _context.requestResize();
     }
 
     void onKeyDown(const VoxelDynamics::Event::KeyDown& event)
@@ -61,12 +104,13 @@ public:
 
     void onUpdate(double /*deltaTime*/) override
     {
-        _context.drawCurrentFrame(_window, _frames, _pipeline);
+        _context.drawCurrentFrame(_window, _frames, _pipeline, _vertexBuffer);
     }
 
 private:
     Vulkan::Context::Pipeline _pipeline;
     Vulkan::Context::Frames _frames;
+    Vulkan::Context::VertexBuffer _vertexBuffer;
 };
 
 // Sandbox App Builder /////////////////////////////////////////////////////////////////////////////

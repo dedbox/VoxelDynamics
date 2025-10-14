@@ -124,6 +124,14 @@ void Application::hideWindow() const
         throw SDLException("Could not hide window");
 }
 
+std::tuple<uint32_t, uint32_t> Application::getWWindowSize() const
+{
+    int width = 0, height = 0;
+    if (!SDL_GetWindowSizeInPixels(_window, &width, &height))
+        throw SDLException("Could not get window size");
+    return std::make_tuple(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+}
+
 // Lifetime Management /////////////////////////////////////////////////////////////////////////////
 
 void Application::update()

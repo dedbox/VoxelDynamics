@@ -64,6 +64,8 @@ public:
     void showWindow() const;
     void hideWindow() const;
 
+    std::tuple<uint32_t, uint32_t> getWWindowSize() const;
+
     // lifetime management
     bool isDone() const { return _isDone; }
     void quit() { _isDone = true; }
