@@ -221,6 +221,7 @@ Context::PhysicalDevice Context::pickPhysicalDevice() const
         std::vector<std::string> availableExtensions;
         uint32_t graphicsQueueFamilyIndex;
         uint32_t presentQueueFamilyIndex;
+        uint32_t transferQueueFamilyIndex;
         std::vector<vk::SurfaceFormatKHR> surfaceFormats;
         std::vector<vk::PresentModeKHR> presentModes;
         FeaturesChain features;
@@ -319,6 +320,33 @@ Context::PhysicalDevice Context::pickPhysicalDevice() const
 
         const auto& [graphicsQueueFamilyIndex, presentQueueFamilyIndex] = *maybe_indices;
 
+        // check for transfer queue family
+        const auto maybe_transfer = [&]() -> std::optional<uint32_t> {
+            std::optional<uint32_t> maybe_transfer;
+            for (const auto&& [i, family] :
+                 std::ranges::views::enumerate(physicalDevice.getQueueFamilyProperties()))
+                if (family.queueFlags & vk::QueueFlagBits::eTransfer)
+                {
+                    if (family.queueFlags & vk::QueueFlagBits::eGraphics ||
+                        physicalDevice.getSurfaceSupportKHR(i, *_surface))
+                    {
+                        if (!maybe_transfer)
+                            maybe_transfer = i;
+                    }
+                    else
+                        return i;
+                }
+            return maybe_transfer;
+        }();
+
+        if (!maybe_transfer)
+        {
+            Log::Core::Trace("Skipping device {}: transfer operations not supported", i + 1);
+            continue;
+        }
+
+        const auto& transferQueueFamilyIndex = *maybe_transfer;
+
         // check for surface format compatibility
         auto formats = physicalDevice.getSurfaceFormatsKHR(_surface);
 
@@ -345,6 +373,7 @@ Context::PhysicalDevice Context::pickPhysicalDevice() const
             availableExtensions,
             graphicsQueueFamilyIndex,
             presentQueueFamilyIndex,
+            transferQueueFamilyIndex,
             formats,
             physicalDevice.getSurfacePresentModesKHR(_surface),
             *features));
@@ -356,31 +385,41 @@ Context::PhysicalDevice Context::pickPhysicalDevice() const
         if (physicalDevices[bin].empty())
             continue;
 
-        for (const auto& pd : physicalDevices[bin])
-        {
-            Log::Core::Info(
-                "Picked physical device {}: {} ({}), API version {}.{}.{}",
-                pd.i + 1,
-                std::string(pd.properties.deviceName),
-                vk::to_string(pd.properties.deviceType),
-                vk::apiVersionMajor(pd.properties.apiVersion),
-                vk::apiVersionMinor(pd.properties.apiVersion),
-                vk::apiVersionPatch(pd.properties.apiVersion));
-            Log::Core::Info("  formats: {}", SurfaceFormatNames(pd.surfaceFormats));
-            Log::Core::Info("  present modes: {}", PresentModeNames(pd.presentModes));
+        const auto& pd = physicalDevices[bin].front();
 
-            // report available extensions
-            for (const auto& ext : pd.availableExtensions)
-                Log::Core::Trace("Available device extension: {}", ext);
+        // determine unique queue family indices
+        const auto uniqueQueueFamilyIndices = [&]() -> std::set<uint32_t> {
+            std::set<uint32_t> indices;
+            indices.emplace(_physicalDevice.graphicsQueueFamilyIndex);
+            indices.emplace(_physicalDevice.presentQueueFamilyIndex);
+            indices.emplace(_physicalDevice.transferQueueFamilyIndex);
+            return indices;
+        }() | std::ranges::to<std::vector>();
 
-            return PhysicalDevice(
-                pd.physicalDevice,
-                pd.graphicsQueueFamilyIndex,
-                pd.presentQueueFamilyIndex,
-                pd.surfaceFormats,
-                pd.presentModes,
-                pd.features);
-        }
+        Log::Core::Info(
+            "Picked physical device {}: {} ({}), API version {}.{}.{}",
+            pd.i + 1,
+            std::string(pd.properties.deviceName),
+            vk::to_string(pd.properties.deviceType),
+            vk::apiVersionMajor(pd.properties.apiVersion),
+            vk::apiVersionMinor(pd.properties.apiVersion),
+            vk::apiVersionPatch(pd.properties.apiVersion));
+        Log::Core::Info("  formats: {}", SurfaceFormatNames(pd.surfaceFormats));
+        Log::Core::Info("  present modes: {}", PresentModeNames(pd.presentModes));
+        Log::Core::Info("  unique queue families: {}", uniqueQueueFamilyIndices.size());
+
+        for (const auto& ext : pd.availableExtensions)
+            Log::Core::Trace("Available device extension: {}", ext);
+
+        return PhysicalDevice(
+            pd.physicalDevice,
+            pd.graphicsQueueFamilyIndex,
+            pd.presentQueueFamilyIndex,
+            pd.transferQueueFamilyIndex,
+            uniqueQueueFamilyIndices,
+            pd.surfaceFormats,
+            pd.presentModes,
+            pd.features);
     }
 
     throw std::runtime_error("No suitable physical device found");
@@ -484,6 +523,10 @@ Context::Device Context::createDevice() const
             queueCreateInfos.push_back(
                 vk::DeviceQueueCreateInfo(
                     {}, _physicalDevice.presentQueueFamilyIndex, 1, &queuePriority));
+        if (_physicalDevice.graphicsQueueFamilyIndex != _physicalDevice.transferQueueFamilyIndex)
+            queueCreateInfos.push_back(
+                vk::DeviceQueueCreateInfo(
+                    {}, _physicalDevice.transferQueueFamilyIndex, 1, &queuePriority));
         return queueCreateInfos;
     }();
 
@@ -503,6 +546,7 @@ Context::Device Context::createDevice() const
     auto device        = vk::raii::Device(*_physicalDevice, createInfo);
     auto graphicsQueue = vk::raii::Queue(device, _physicalDevice.graphicsQueueFamilyIndex, 0);
     auto presentQueue  = vk::raii::Queue(device, _physicalDevice.presentQueueFamilyIndex, 0);
+    auto transferQueue = vk::raii::Queue(device, _physicalDevice.transferQueueFamilyIndex, 0);
 
     device.setDebugUtilsObjectNameEXT(
         vk::DebugUtilsObjectNameInfoEXT(
@@ -518,9 +562,19 @@ Context::Device Context::createDevice() const
         vk::DebugUtilsObjectNameInfoEXT(
             vk::ObjectType::eQueue, reinterpret_cast<uint64_t>(&**presentQueue), "Present Queue"));
 
+    device.setDebugUtilsObjectNameEXT(
+        vk::DebugUtilsObjectNameInfoEXT(
+            vk::ObjectType::eQueue,
+            reinterpret_cast<uint64_t>(&**transferQueue),
+            "Transfer Queue"));
+
     Log::Core::Info("Logical device created");
 
-    return Device(std::move(device), std::move(graphicsQueue), std::move(presentQueue));
+    return Device(
+        std::move(device),
+        std::move(graphicsQueue),
+        std::move(presentQueue),
+        std::move(transferQueue));
 }
 
 // Swap Chain //////////////////////////////////////////////////////////////////////////////////////
@@ -624,14 +678,6 @@ Context::SwapChain Context::createSwapChain(SDL_Window* window) const
                                 ? caps.minImageCount + 1
                                 : std::min(caps.minImageCount + 1, caps.maxImageCount);
 
-    // determine unique queue family indices
-    const auto queueFamilyIndices = [&]() -> std::set<uint32_t> {
-        std::set<uint32_t> indices;
-        indices.emplace(_physicalDevice.graphicsQueueFamilyIndex);
-        indices.emplace(_physicalDevice.presentQueueFamilyIndex);
-        return indices;
-    }() | std::ranges::to<std::vector>();
-
     // create the swap chain
     const auto createInfo = vk::SwapchainCreateInfoKHR(
         {},
@@ -643,7 +689,7 @@ Context::SwapChain Context::createSwapChain(SDL_Window* window) const
         1,
         vk::ImageUsageFlagBits::eColorAttachment,
         vk::SharingMode::eExclusive,
-        queueFamilyIndices,
+        _physicalDevice.uniqueQueueFamilyIndices,
         caps.supportedTransforms & vk::SurfaceTransformFlagBitsKHR::eIdentity
             ? vk::SurfaceTransformFlagBitsKHR::eIdentity
             : caps.currentTransform,
@@ -877,32 +923,45 @@ Context::Frames Context::createFrames() const
     std::vector<Frame> frames;
     frames.reserve(buildInfo.maxFramesInFlight);
 
-    vk::CommandPoolCreateInfo poolCreateInfo(
+    vk::CommandPoolCreateInfo gpPoolCreateInfo(
         vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
         _physicalDevice.graphicsQueueFamilyIndex);
+
+    vk::CommandPoolCreateInfo transferPoolCreateInfo(
+        vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+        _physicalDevice.transferQueueFamilyIndex);
 
     vk::SemaphoreCreateInfo semaphoreCreateInfo{};
 
     for (const size_t i : std::ranges::views::iota(0, buildInfo.maxFramesInFlight))
     {
-        // create command pool
-        vk::raii::CommandPool pool(*_device, poolCreateInfo);
+        // create graphics/present command pool
+        vk::raii::CommandPool gpPool(*_device, gpPoolCreateInfo);
 
         setDebugName(
             vk::ObjectType::eCommandPool,
-            reinterpret_cast<uint64_t>(&**pool),
+            reinterpret_cast<uint64_t>(&**gpPool),
             std::format("Command Pool {}", i));
 
-        // allocate command buffer from the pool
-        vk::CommandBufferAllocateInfo bufferAllocInfo(*pool, vk::CommandBufferLevel::ePrimary, 1);
+        // allocate command buffer from the graphics/present pool
+        vk::CommandBufferAllocateInfo gpBufferAllocInfo(
+            *gpPool, vk::CommandBufferLevel::ePrimary, 1);
 
-        vk::raii::CommandBuffer buffer =
-            std::move(_device->allocateCommandBuffers(bufferAllocInfo).front());
+        vk::raii::CommandBuffer gpBuffer =
+            std::move(_device->allocateCommandBuffers(gpBufferAllocInfo).front());
 
         setDebugName(
             vk::ObjectType::eCommandBuffer,
-            reinterpret_cast<uint64_t>(&**buffer),
-            std::format("Command Buffer {}", i));
+            reinterpret_cast<uint64_t>(&**gpBuffer),
+            std::format("Graphics/Present Command Buffer {}", i));
+
+        // create transfer command pool
+        vk::raii::CommandPool transferPool(*_device, transferPoolCreateInfo);
+
+        setDebugName(
+            vk::ObjectType::eCommandPool,
+            reinterpret_cast<uint64_t>(&**transferPool),
+            std::format("Transfer Pool {}", i));
 
         // create semaphore
         vk::raii::Semaphore renderFinishSemaphore(*_device, semaphoreCreateInfo);
@@ -922,8 +981,9 @@ Context::Frames Context::createFrames() const
             std::format("In Flight Fence {}", i));
 
         frames.emplace_back(
-            std::move(pool),
-            std::move(buffer),
+            std::move(gpPool),
+            std::move(gpBuffer),
+            std::move(transferPool),
             std::move(renderFinishSemaphore),
             std::move(inFlightFence));
     }
@@ -982,7 +1042,7 @@ void Context::drawCurrentFrame(
     _device->resetFences(*frame.inFlightFence);
 
     // reset the current command pool (and implicitly the command buffer)
-    frame.pool.reset();
+    frame.gpPool.reset();
 
     // record the current command buffer
     recordCommandBuffer(frame, imageIndex, pipeline, vertexBuffer);
@@ -995,7 +1055,7 @@ void Context::drawCurrentFrame(
         &*frame.imageAvailableSemaphore,                    // wait semaphores
         &waitDstStageMask,                                  // wait destination stage mask
         1,                                                  // command buffer count
-        &*frame.buffer,                                     // command buffers
+        &*frame.gpBuffer,                                   // command buffers
         1,                                                  // signal semaphore count
         &*_swapChain.renderFinishedSemaphores[imageIndex]); // signal semaphores
 
@@ -1034,11 +1094,11 @@ void Context::recordCommandBuffer(
     Frame& frame, uint32_t imageIndex, Pipeline& pipeline, VertexBuffer& vertexBuffer)
 {
     // begin recording
-    frame.buffer.begin({});
+    frame.gpBuffer.begin({});
 
     // transition swap chain image to color attachment layout
     transitionImageLayout(
-        frame.buffer,
+        frame.gpBuffer,
         _swapChain.images[imageIndex],
         vk::ImageLayout::eUndefined,                         // old layout
         vk::ImageLayout::eColorAttachmentOptimal,            // new layout
@@ -1069,13 +1129,13 @@ void Context::recordCommandBuffer(
         &attachmentInfo);                      // color attachments
 
     // begin rendering
-    frame.buffer.beginRendering(renderingInfo);
+    frame.gpBuffer.beginRendering(renderingInfo);
 
     // bind the graphics pipeline
-    frame.buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.graphics);
+    frame.gpBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.graphics);
 
     // supply dynamic rendering data
-    frame.buffer.setViewport(
+    frame.gpBuffer.setViewport(
         0,
         vk::Viewport(
             0.0F,
@@ -1084,27 +1144,27 @@ void Context::recordCommandBuffer(
             static_cast<float>(_swapChain.extent.height),
             0.0F,
             1.0F));
-    frame.buffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), _swapChain.extent));
+    frame.gpBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), _swapChain.extent));
 
     // bind vertex data
-    frame.buffer.bindVertexBuffers(
+    frame.gpBuffer.bindVertexBuffers(
         0,              // first binding
         **vertexBuffer, // buffer
         {0});           // offsets
 
     // issue draw commands
-    frame.buffer.draw(
+    frame.gpBuffer.draw(
         vertexBuffer.count, // vertex count
         1,                  // instance count
         0,                  // first vertex
         0);                 // first instance
 
     // end rendering
-    frame.buffer.endRendering();
+    frame.gpBuffer.endRendering();
 
     // transition swap chain image to present layout
     transitionImageLayout(
-        frame.buffer,
+        frame.gpBuffer,
         _swapChain.images[imageIndex],
         vk::ImageLayout::eColorAttachmentOptimal,           // old layout
         vk::ImageLayout::ePresentSrcKHR,                    // new layout
@@ -1113,7 +1173,7 @@ void Context::recordCommandBuffer(
         vk::PipelineStageFlagBits2::eColorAttachmentOutput, // source stage
         vk::PipelineStageFlagBits2::eBottomOfPipe);         // destination stage
 
-    frame.buffer.end();
+    frame.gpBuffer.end();
 }
 
 void Context::transitionImageLayout(
@@ -1168,6 +1228,45 @@ void Context::cleanupSwapChain()
 void Context::requestResize()
 {
     _swapChain.frameBufferResized = true;
+}
+
+std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> Context::createBuffer(
+    vk::DeviceSize size,
+    vk::BufferUsageFlags usage,
+    vk::MemoryPropertyFlags properties,
+    const std::string& bufferName,
+    const std::string& memoryName) const
+{
+    // create buffer
+    vk::BufferCreateInfo createInfo({}, size, usage, vk::SharingMode::eExclusive);
+    vk::raii::Buffer buffer(*_device, createInfo);
+    setDebugName(vk::ObjectType::eBuffer, reinterpret_cast<uint64_t>(&**buffer), bufferName);
+
+    // allocate buffer memory
+    const auto memReqs = buffer.getMemoryRequirements();
+    const auto memType = findMemoryType(memReqs.memoryTypeBits, properties);
+    vk::MemoryAllocateInfo allocInfo(memReqs.size, memType);
+    vk::raii::DeviceMemory memory(*_device, allocInfo);
+    setDebugName(vk::ObjectType::eDeviceMemory, reinterpret_cast<uint64_t>(&**memory), memoryName);
+
+    // associate this memory with the buffer
+    buffer.bindMemory(*memory, 0);
+
+    return std::make_pair(std::move(buffer), std::move(memory));
+}
+
+uint32_t Context::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const
+{
+    // query available memory types
+    vk::PhysicalDeviceMemoryProperties memProps = _physicalDevice->getMemoryProperties();
+
+    // find a suitable type
+    for (const auto& [i, memType] : std::ranges::views::enumerate(memProps.memoryTypes))
+        if ((typeFilter * (1U << static_cast<uint32_t>(i))) &&
+            (memType.propertyFlags & properties) == properties)
+            return i;
+
+    throw std::runtime_error("Could not find a suitable memory type");
 }
 
 } // namespace VoxelDynamics::Vulkan
