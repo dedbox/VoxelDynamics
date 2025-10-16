@@ -1230,6 +1230,8 @@ void Context::requestResize()
     _swapChain.frameBufferResized = true;
 }
 
+// Command Buffer //////////////////////////////////////////////////////////////////////////////////
+
 std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> Context::createBuffer(
     vk::DeviceSize size,
     vk::BufferUsageFlags usage,
@@ -1267,6 +1269,119 @@ uint32_t Context::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags pr
             return i;
 
     throw std::runtime_error("Could not find a suitable memory type");
+}
+
+[[nodiscard]] std::pair<vk::raii::CommandBuffer, vk::raii::Semaphore> Context::
+    transferStagingBufferOut(
+        const Frame& frame,
+        const vk::raii::Buffer& stagingBuffer,
+        const vk::raii::Buffer& targetBuffer,
+        const vk::DeviceSize size) const
+{
+    // create a transfer semaphore
+    vk::raii::Semaphore semaphore(*_device, vk::SemaphoreCreateInfo());
+
+    setDebugName(
+        vk::ObjectType::eSemaphore, reinterpret_cast<uint64_t>(&**semaphore), "Transfer Semaphore");
+
+    // create a transfer command buffer
+    vk::CommandBufferAllocateInfo allocInfo(
+        *frame.transferPool, vk::CommandBufferLevel::ePrimary, 1);
+    auto cmdBuffer = std::move(_device->allocateCommandBuffers(allocInfo).front());
+
+    setDebugName(
+        vk::ObjectType::eCommandBuffer,
+        reinterpret_cast<uint64_t>(&**cmdBuffer),
+        "Transfer Out Command Buffer");
+
+    // begin recording
+    cmdBuffer.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
+
+    // copy staging buffer to vertex buffer
+    cmdBuffer.copyBuffer(*stagingBuffer, *targetBuffer, vk::BufferCopy(0, 0, size));
+
+    // release ownership of the copied data
+    vk::BufferMemoryBarrier2 releaseBarrier(
+        vk::PipelineStageFlagBits2::eTransfer,    // source stage mask
+        vk::AccessFlagBits2::eTransferWrite,      // source access mask
+        vk::PipelineStageFlagBits2::eNone,        // destination stage mask
+        vk::AccessFlagBits2::eNone,               // destination access mask
+        _physicalDevice.transferQueueFamilyIndex, // source queue family index
+        _physicalDevice.graphicsQueueFamilyIndex, // destination queue family index
+        targetBuffer,                             // the resource being transferred
+        0,                                        // offset
+        vk::WholeSize);                           // size
+    vk::DependencyInfo releaseDepInfo({}, nullptr, releaseBarrier, nullptr);
+    cmdBuffer.pipelineBarrier2(releaseDepInfo);
+
+    // end recording
+    cmdBuffer.end();
+
+    // tell the command buffer to signal the semaphore
+    vk::SemaphoreSubmitInfo signalSemaphoreInfo(
+        *semaphore, {}, vk::PipelineStageFlagBits2::eTransfer);
+    vk::CommandBufferSubmitInfo cmdBufferSubmitInfo(cmdBuffer);
+
+    // submit the command buffer
+    vk::SubmitInfo2 submitInfo({}, 0, nullptr, 1, &cmdBufferSubmitInfo, 1, &signalSemaphoreInfo);
+    _device.transferQueue.submit2(submitInfo, nullptr);
+
+    return std::make_pair(std::move(cmdBuffer), std::move(semaphore));
+}
+
+void Context::transferStagingBufferIn(
+    const Frame& frame,
+    const vk::raii::Buffer& targetBuffer,
+    const vk::PipelineStageFlags2 stage,
+    [[maybe_unused]] vk::raii::CommandBuffer&& outCmdBuffer,
+    vk::raii::Semaphore&& semaphore) const
+{
+    // create a graphics command buffer
+    vk::CommandBufferAllocateInfo allocInfo(*frame.gpPool, vk::CommandBufferLevel::ePrimary, 1);
+    auto cmdBuffer = std::move(_device->allocateCommandBuffers(allocInfo).front());
+
+    setDebugName(
+        vk::ObjectType::eCommandBuffer,
+        reinterpret_cast<uint64_t>(&**cmdBuffer),
+        std::format("Transfer In Command Buffer"));
+
+    // begin recording
+    cmdBuffer.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
+
+    // acquire ownership of the copied data
+    vk::BufferMemoryBarrier2 acquireBarrier(
+        vk::PipelineStageFlagBits2::eNone,         // source stage mask
+        vk::AccessFlagBits2::eNone,                // source access mask
+        stage,                                     // first stage where data is used
+        vk::AccessFlagBits2::eVertexAttributeRead, // first access type
+        _physicalDevice.transferQueueFamilyIndex,  // source queue family index
+        _physicalDevice.graphicsQueueFamilyIndex,  // destination queue family index
+        targetBuffer,                              // the resource being transferred
+        0,                                         // offset
+        vk::WholeSize);                            // size
+    vk::DependencyInfo acquireDepInfo({}, nullptr, acquireBarrier, nullptr);
+    cmdBuffer.pipelineBarrier2(acquireDepInfo);
+
+    // end recording
+    cmdBuffer.end();
+
+    // tell the command buffer to wait on the semaphore
+    vk::SemaphoreSubmitInfo waitSemaphoreInfo(*std::move(semaphore), {}, stage);
+    vk::CommandBufferSubmitInfo cmdBufferSubmitInfo(cmdBuffer);
+
+    // create a fence to signal end of submission
+    vk::raii::Fence fence(*_device, vk::FenceCreateInfo());
+
+    // submit the command buffer
+    vk::SubmitInfo2 submitInfo({}, 1, &waitSemaphoreInfo, 1, &cmdBufferSubmitInfo);
+    _device.graphicsQueue.submit2(submitInfo, *fence);
+
+    // wait on the fence
+    if (_device->waitForFences(*fence, vk::True, std::numeric_limits<uint64_t>::max()) !=
+        vk::Result::eSuccess)
+        throw std::runtime_error("Could not wait for fence");
+
+    _device->resetFences(*fence);
 }
 
 } // namespace VoxelDynamics::Vulkan

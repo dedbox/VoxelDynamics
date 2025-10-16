@@ -61,6 +61,10 @@ public:
     {
         std::vector<Frame> frames;
         size_t currentFrame;
+
+        // forward subscript operator to the underlying vector
+        Frame& operator[](const size_t i) { return frames[i]; }
+        const Frame& operator[](const size_t i) const { return frames[i]; }
     };
 
     Frames createFrames() const;
@@ -85,6 +89,53 @@ public:
 
     void requestResize();
 
+    // Command Buffer //////////////////////////////////////////////////////////////////////////////
+
+    std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(
+        vk::DeviceSize size,
+        vk::BufferUsageFlags usage,
+        vk::MemoryPropertyFlags properties,
+        const std::string& bufferName,
+        const std::string& memoryName) const;
+
+    uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
+
+    template <typename T>
+    std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createStagingBuffer(
+        const std::vector<T>& data,
+        const vk::DeviceSize size,
+        const std::string& bufferName,
+        const std::string& memoryName) const
+    {
+
+        auto&& [buffer, memory] = createBuffer(
+            size,
+            vk::BufferUsageFlagBits::eTransferSrc,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+            bufferName,
+            memoryName);
+
+        // copy vertex data to the staging buffer
+        void* bufferData = memory.mapMemory(0, size);
+        memcpy(bufferData, std::ranges::data(data), size);
+        memory.unmapMemory();
+
+        return std::make_pair(std::move(buffer), std::move(memory));
+    }
+
+    [[nodiscard]] std::pair<vk::raii::CommandBuffer, vk::raii::Semaphore> transferStagingBufferOut(
+        const Frame& frame,
+        const vk::raii::Buffer& stagingBuffer,
+        const vk::raii::Buffer& targetBuffer,
+        const vk::DeviceSize size) const;
+
+    void transferStagingBufferIn(
+        const Frame& frame,
+        const vk::raii::Buffer& targetBuffer,
+        const vk::PipelineStageFlags2 stage,
+        [[maybe_unused]] vk::raii::CommandBuffer&& outCmdBuffer,
+        vk::raii::Semaphore&& semaphore) const;
+
     // Vertex Buffer ///////////////////////////////////////////////////////////////////////////////
 
     struct VertexBuffer
@@ -98,155 +149,49 @@ public:
         const vk::raii::Buffer& operator*() const { return buffer; }
     };
 
-    std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(
-        vk::DeviceSize size,
-        vk::BufferUsageFlags usage,
-        vk::MemoryPropertyFlags properties,
-        const std::string& bufferName,
-        const std::string& memoryName) const;
-
     template <typename T>
-    VertexBuffer createVertexBuffer(const std::vector<T>& vertices) const
+    VertexBuffer createVertexBuffer(Frames& frames, const std::vector<T>& vertices) const
     {
-        // create vertex buffer
-        const auto size         = static_cast<vk::DeviceSize>(vertices.size() * sizeof(T));
-        auto&& [buffer, memory] = createBuffer(
-            size,
-            vk::BufferUsageFlagBits::eVertexBuffer,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-            "Vertex Buffer",
-            "Vertex Buffer Memory");
+        const auto size   = static_cast<vk::DeviceSize>(vertices.size() * sizeof(T));
+        const auto& frame = frames[frames.currentFrame];
 
-        // copy vertex data to the buffer
-        void* data = memory.mapMemory(0, size);
-        memcpy(data, std::ranges::data(vertices), size);
-        memory.unmapMemory();
+        // create a staging buffer
+        auto&& [stagingBuffer, stagingMemory] = createStagingBuffer(
+            vertices, size, "Vertex Staging Buffer", "Vertex Staging Buffer Memory");
 
-        return VertexBuffer(std::move(buffer), std::move(memory), vertices.size());
-    }
-
-    template <typename T>
-    VertexBuffer createStagedVertexBuffer(Frames& frames, const std::vector<T>& vertices) const
-    {
-        const auto size = static_cast<vk::DeviceSize>(vertices.size() * sizeof(T));
-
-        // create staging buffer
-        auto&& [stagingBuffer, stagingMemory] = createBuffer(
-            size,
-            vk::BufferUsageFlagBits::eTransferSrc,
-            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-            "Vertex Staging Buffer",
-            "Vertex Staging Buffer Memory");
-
-        // copy vertex data to the staging buffer
-        void* data = stagingMemory.mapMemory(0, size);
-        memcpy(data, std::ranges::data(vertices), size);
-        stagingMemory.unmapMemory();
-
-        // create vertex buffer
+        // create a vertex buffer
         auto&& [vertexBuffer, vertexMemory] = createBuffer(
             size,
             vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst,
             vk::MemoryPropertyFlagBits::eDeviceLocal,
-            "Vertex Staging Buffer",
-            "Vertex Staging Buffer Memory");
+            "Vertex Buffer",
+            "Vertex Buffer Memory");
 
-        // create transfer semaphore
-        Frame& frame = frames.frames[frames.currentFrame];
-        vk::raii::Semaphore semaphore(*_device, vk::SemaphoreCreateInfo());
-
-        // record transfer command buffer
-        vk::CommandBufferAllocateInfo transferAllocateInfo(
-            *frame.transferPool, vk::CommandBufferLevel::ePrimary, 1);
-        auto transferBuffers = _device->allocateCommandBuffers(transferAllocateInfo);
-        vk::raii::CommandBuffer transferBuffer = std::move(transferBuffers.front());
-
-        setDebugName(
-            vk::ObjectType::eCommandBuffer,
-            reinterpret_cast<uint64_t>(&**transferBuffer),
-            std::format("Staged Transfer Command Buffer"));
-
-        transferBuffer.begin(
-            vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
-
-        // copy staging buffer to vertex buffer
-        transferBuffer.copyBuffer(*stagingBuffer, *vertexBuffer, vk::BufferCopy(0, 0, size));
-
-        // "release ownership" barrier
-        vk::BufferMemoryBarrier2 releaseBarrier(
-            vk::PipelineStageFlagBits2::eTransfer,    // source stage mask
-            vk::AccessFlagBits2::eTransferWrite,      // source access mask
-            vk::PipelineStageFlagBits2::eNone,        // destination stage mask
-            vk::AccessFlagBits2::eNone,               // destination access mask
-            _physicalDevice.transferQueueFamilyIndex, // source queue family index
-            _physicalDevice.graphicsQueueFamilyIndex, // destination queue family index
-            vertexBuffer,                             // the resource being transferred
-            0,                                        // offset
-            vk::WholeSize);                           // size
-        vk::DependencyInfo releaseDepInfo({}, nullptr, releaseBarrier, nullptr);
-        transferBuffer.pipelineBarrier2(releaseDepInfo);
-
-        transferBuffer.end();
-
-        // submit transfer command buffer and signal semaphore
-        vk::SemaphoreSubmitInfo signalSemaphoreInfo(
-            *semaphore, {}, vk::PipelineStageFlagBits2::eTransfer);
-        vk::CommandBufferSubmitInfo transferCmdBufferInfo(transferBuffer);
-        vk::SubmitInfo2 transferSubmitInfo(
-            {}, 0, nullptr, 1, &transferCmdBufferInfo, 1, &signalSemaphoreInfo);
-
-        _device.transferQueue.submit2(transferSubmitInfo, nullptr);
-
-        // record graphics command buffer
-        vk::CommandBufferAllocateInfo graphicsAllocateInfo(
-            *frame.gpPool, vk::CommandBufferLevel::ePrimary, 1);
-        auto graphicsBuffers = _device->allocateCommandBuffers(graphicsAllocateInfo);
-        vk::raii::CommandBuffer graphicsBuffer = std::move(graphicsBuffers.front());
-
-        setDebugName(
-            vk::ObjectType::eCommandBuffer,
-            reinterpret_cast<uint64_t>(&**graphicsBuffer),
-            std::format("Staged Graphics Command Buffer"));
-
-        graphicsBuffer.begin(
-            vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
-
-        // "acquire ownership" barrier
-        vk::BufferMemoryBarrier2 acquirearrier(
-            vk::PipelineStageFlagBits2::eNone,                 // source stage mask
-            vk::AccessFlagBits2::eNone,                        // source access mask
-            vk::PipelineStageFlagBits2::eVertexAttributeInput, // first stage where data is used
-            vk::AccessFlagBits2::eVertexAttributeRead,         // first access type
-            _physicalDevice.transferQueueFamilyIndex,          // source queue family index
-            _physicalDevice.graphicsQueueFamilyIndex,          // destination queue family index
-            vertexBuffer,                                      // the resource being transferred
-            0,                                                 // offset
-            vk::WholeSize);                                    // size
-        vk::DependencyInfo acquireDepInfo({}, nullptr, acquirearrier, nullptr);
-        graphicsBuffer.pipelineBarrier2(acquireDepInfo);
-
-        graphicsBuffer.end();
-
-        // submit graphics command buffer, waiting for the semaphore
-        vk::SemaphoreSubmitInfo waitSemaphoreInfo(
-            *semaphore, {}, vk::PipelineStageFlagBits2::eVertexAttributeInput);
-        vk::CommandBufferSubmitInfo graphicsCmdBufferInfo(graphicsBuffer);
-        vk::SubmitInfo2 graphicsSubmitInfo({}, 1, &waitSemaphoreInfo, 1, &graphicsCmdBufferInfo);
-
-        vk::raii::Fence fence(*_device, vk::FenceCreateInfo());
-
-        _device.graphicsQueue.submit2(graphicsSubmitInfo, *fence);
-
-        if (_device->waitForFences(*fence, vk::True, std::numeric_limits<uint64_t>::max()) !=
-            vk::Result::eSuccess)
-            throw std::runtime_error("Could not wait for fence");
-
-        _device->resetFences(*fence);
+        // perform the transfer
+        auto&& [outCmdBuffer, semaphore] =
+            transferStagingBufferOut(frame, stagingBuffer, vertexBuffer, size);
+        transferStagingBufferIn(
+            frame,
+            vertexBuffer,
+            vk::PipelineStageFlagBits2::eVertexAttributeInput,
+            std::move(outCmdBuffer),
+            std::move(semaphore));
 
         return VertexBuffer(std::move(vertexBuffer), std::move(vertexMemory), vertices.size());
     }
 
-    uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
+    // Index Buffer ////////////////////////////////////////////////////////////////////////////////
+
+    struct IndexBuffer
+    {
+        vk::raii::Buffer buffer;
+        vk::raii::DeviceMemory memory;
+        uint32_t count;
+
+        // dereference operator gives access to the underlying Vulkan object
+        vk::raii::Buffer& operator*() { return buffer; }
+        const vk::raii::Buffer& operator*() const { return buffer; }
+    };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 

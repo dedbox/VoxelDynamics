@@ -50,7 +50,7 @@ public:
               Vertex::getBindingDescription(),
               Vertex::getAttributeDescriptions()))
         , _frames(_context.createFrames())
-        , _vertexBuffer(_context.createStagedVertexBuffer(_frames, _vertices))
+        , _vertexBuffer(_context.createVertexBuffer(_frames, _vertices))
     {
         // connect event listeners
         Event::Bus::Connect<Event::WindowClose, &SandboxApp::onClose>(this);
