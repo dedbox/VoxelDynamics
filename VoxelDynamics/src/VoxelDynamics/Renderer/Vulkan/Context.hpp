@@ -71,11 +71,21 @@ public:
     void destroyFrames(Frames& frames) const;
 
     struct VertexBuffer;
+    struct IndexBuffer;
 
     void drawCurrentFrame(
-        SDL_Window* window, Frames& frames, Pipeline& pipeline, VertexBuffer& vertexBuffer);
+        SDL_Window* window,
+        Frames& frames,
+        Pipeline& pipeline,
+        VertexBuffer& vertexBuffer,
+        std::optional<std::reference_wrapper<IndexBuffer>> indexBuffer = std::nullopt);
+
     void recordCommandBuffer(
-        Frame& frame, uint32_t imageIndex, Pipeline& pipeline, VertexBuffer& vertexBuffer);
+        Frame& frame,
+        uint32_t imageIndex,
+        Pipeline& pipeline,
+        VertexBuffer& vertexBuffer,
+        std::optional<std::reference_wrapper<IndexBuffer>> indexBuffer = std::nullopt);
 
     void transitionImageLayout(
         vk::raii::CommandBuffer& buffer,
@@ -133,6 +143,7 @@ public:
         const Frame& frame,
         const vk::raii::Buffer& targetBuffer,
         const vk::PipelineStageFlags2 stage,
+        const vk::AccessFlagBits2 access,
         [[maybe_unused]] vk::raii::CommandBuffer&& outCmdBuffer,
         vk::raii::Semaphore&& semaphore) const;
 
@@ -174,6 +185,7 @@ public:
             frame,
             vertexBuffer,
             vk::PipelineStageFlagBits2::eVertexAttributeInput,
+            vk::AccessFlagBits2::eVertexAttributeRead,
             std::move(outCmdBuffer),
             std::move(semaphore));
 
@@ -192,6 +204,38 @@ public:
         vk::raii::Buffer& operator*() { return buffer; }
         const vk::raii::Buffer& operator*() const { return buffer; }
     };
+
+    template <typename T>
+    IndexBuffer createIndexBuffer(Frames& frames, const std::vector<T>& indices) const
+    {
+        const auto size   = static_cast<vk::DeviceSize>(indices.size() * sizeof(T));
+        const auto& frame = frames[frames.currentFrame];
+
+        // create a staging buffer
+        auto&& [stagingBuffer, stagingMemory] = createStagingBuffer(
+            indices, size, "Index Staging Buffer", "Index Staging Buffer Memory");
+
+        // create a vertex buffer
+        auto&& [indexBuffer, indexMemory] = createBuffer(
+            size,
+            vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eDeviceLocal,
+            "Index Buffer",
+            "Imdex Buffer Memory");
+
+        // perform the transfer
+        auto&& [outCmdBuffer, semaphore] =
+            transferStagingBufferOut(frame, stagingBuffer, indexBuffer, size);
+        transferStagingBufferIn(
+            frame,
+            indexBuffer,
+            vk::PipelineStageFlagBits2::eIndexInput,
+            vk::AccessFlagBits2::eIndexRead,
+            std::move(outCmdBuffer),
+            std::move(semaphore));
+
+        return IndexBuffer(std::move(indexBuffer), std::move(indexMemory), indices.size());
+    }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
 

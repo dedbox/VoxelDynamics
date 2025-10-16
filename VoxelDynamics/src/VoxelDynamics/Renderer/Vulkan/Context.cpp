@@ -1004,7 +1004,11 @@ void Context::destroyFrames(Frames& frames) const
 }
 
 void Context::drawCurrentFrame(
-    SDL_Window* window, Frames& frames, Pipeline& pipeline, VertexBuffer& vertexBuffer)
+    SDL_Window* window,
+    Frames& frames,
+    Pipeline& pipeline,
+    VertexBuffer& vertexBuffer,
+    std::optional<std::reference_wrapper<IndexBuffer>> indexBuffer)
 {
     Frame& frame = frames.frames[frames.currentFrame];
 
@@ -1045,7 +1049,7 @@ void Context::drawCurrentFrame(
     frame.gpPool.reset();
 
     // record the current command buffer
-    recordCommandBuffer(frame, imageIndex, pipeline, vertexBuffer);
+    recordCommandBuffer(frame, imageIndex, pipeline, vertexBuffer, indexBuffer);
 
     // submit the command buffer
     vk::PipelineStageFlags waitDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
@@ -1091,7 +1095,11 @@ void Context::drawCurrentFrame(
 }
 
 void Context::recordCommandBuffer(
-    Frame& frame, uint32_t imageIndex, Pipeline& pipeline, VertexBuffer& vertexBuffer)
+    Frame& frame,
+    uint32_t imageIndex,
+    Pipeline& pipeline,
+    VertexBuffer& vertexBuffer,
+    std::optional<std::reference_wrapper<IndexBuffer>> indexBuffer)
 {
     // begin recording
     frame.gpBuffer.begin({});
@@ -1152,12 +1160,30 @@ void Context::recordCommandBuffer(
         **vertexBuffer, // buffer
         {0});           // offsets
 
-    // issue draw commands
-    frame.gpBuffer.draw(
-        vertexBuffer.count, // vertex count
-        1,                  // instance count
-        0,                  // first vertex
-        0);                 // first instance
+    if (indexBuffer)
+    {
+        // bind index data
+        const auto& ib = indexBuffer->get();
+        frame.gpBuffer.bindIndexBuffer(
+            **ib,                    // buffer
+            0,                       // offset
+            vk::IndexType::eUint16); // index type
+
+        // issue indexed draw command
+        frame.gpBuffer.drawIndexed(
+            ib.count, // index count
+            1,        // instance count
+            0,        // first index
+            0,        // vertex offset
+            0);       // first instance
+    }
+    else
+        // issue non-indexed draw command
+        frame.gpBuffer.draw(
+            vertexBuffer.count, // vertex count
+            1,                  // instance count
+            0,                  // first vertex
+            0);                 // first instance
 
     // end rendering
     frame.gpBuffer.endRendering();
@@ -1297,7 +1323,7 @@ uint32_t Context::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags pr
     // begin recording
     cmdBuffer.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
-    // copy staging buffer to vertex buffer
+    // copy staging buffer to target buffer
     cmdBuffer.copyBuffer(*stagingBuffer, *targetBuffer, vk::BufferCopy(0, 0, size));
 
     // release ownership of the copied data
@@ -1333,6 +1359,7 @@ void Context::transferStagingBufferIn(
     const Frame& frame,
     const vk::raii::Buffer& targetBuffer,
     const vk::PipelineStageFlags2 stage,
+    const vk::AccessFlagBits2 access,
     [[maybe_unused]] vk::raii::CommandBuffer&& outCmdBuffer,
     vk::raii::Semaphore&& semaphore) const
 {
@@ -1350,15 +1377,15 @@ void Context::transferStagingBufferIn(
 
     // acquire ownership of the copied data
     vk::BufferMemoryBarrier2 acquireBarrier(
-        vk::PipelineStageFlagBits2::eNone,         // source stage mask
-        vk::AccessFlagBits2::eNone,                // source access mask
-        stage,                                     // first stage where data is used
-        vk::AccessFlagBits2::eVertexAttributeRead, // first access type
-        _physicalDevice.transferQueueFamilyIndex,  // source queue family index
-        _physicalDevice.graphicsQueueFamilyIndex,  // destination queue family index
-        targetBuffer,                              // the resource being transferred
-        0,                                         // offset
-        vk::WholeSize);                            // size
+        vk::PipelineStageFlagBits2::eNone,        // source stage mask
+        vk::AccessFlagBits2::eNone,               // source access mask
+        stage,                                    // first stage where data is used
+        access,                                   // first access type
+        _physicalDevice.transferQueueFamilyIndex, // source queue family index
+        _physicalDevice.graphicsQueueFamilyIndex, // destination queue family index
+        targetBuffer,                             // the resource being transferred
+        0,                                        // offset
+        vk::WholeSize);                           // size
     vk::DependencyInfo acquireDepInfo({}, nullptr, acquireBarrier, nullptr);
     cmdBuffer.pipelineBarrier2(acquireDepInfo);
 

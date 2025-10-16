@@ -36,11 +36,14 @@ class SandboxApp : public Application
 private:
     const std::vector<Vertex> _vertices = {
         // clang-format off
-            {.position = { 0.0F, -0.5F}, .color = {1.0F, 0.0F, 0.0F}},
-            {.position = { 0.5F,  0.5F}, .color = {0.0F, 1.0F, 0.0F}},
-            {.position = {-0.5F,  0.5F}, .color = {0.0F, 0.0F, 1.0F}},
+        {.position={-0.5F, -0.5F}, .color={1.0F, 0.0F, 0.0F}},
+        {.position={ 0.5F, -0.5F}, .color={0.0F, 1.0F, 0.0F}},
+        {.position={ 0.5F,  0.5F}, .color={0.0F, 0.0F, 1.0F}},
+        {.position={-0.5F,  0.5F}, .color={1.0F, 1.0F, 1.0F}},
         // clang-format on
     };
+
+    const std::vector<uint16_t> _indices = {0, 1, 2, 2, 3, 0};
 
 public:
     explicit SandboxApp(const Application::BuildInfo& buildInfo)
@@ -51,6 +54,7 @@ public:
               Vertex::getAttributeDescriptions()))
         , _frames(_context.createFrames())
         , _vertexBuffer(_context.createVertexBuffer(_frames, _vertices))
+        , _indexBuffer(_context.createIndexBuffer(_frames, _indices))
     {
         // connect event listeners
         Event::Bus::Connect<Event::WindowClose, &SandboxApp::onClose>(this);
@@ -104,13 +108,14 @@ public:
 
     void onUpdate(double /*deltaTime*/) override
     {
-        _context.drawCurrentFrame(_window, _frames, _pipeline, _vertexBuffer);
+        _context.drawCurrentFrame(_window, _frames, _pipeline, _vertexBuffer, _indexBuffer);
     }
 
 private:
     Vulkan::Context::Pipeline _pipeline;
     Vulkan::Context::Frames _frames;
     Vulkan::Context::VertexBuffer _vertexBuffer;
+    Vulkan::Context::IndexBuffer _indexBuffer;
 };
 
 // Sandbox App Builder /////////////////////////////////////////////////////////////////////////////
