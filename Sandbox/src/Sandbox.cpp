@@ -49,7 +49,7 @@ public:
     explicit SandboxApp(const Application::BuildInfo& buildInfo)
         : Application(buildInfo)
         , _pipeline(_context.createGraphicsPipeline(
-              "shaders/slang.slang.spv",
+              "shaders/shader.slang.spv",
               Vertex::getBindingDescription(),
               Vertex::getAttributeDescriptions()))
         , _frames(_context.createFrames())
