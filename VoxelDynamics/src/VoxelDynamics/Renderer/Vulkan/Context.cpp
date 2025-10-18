@@ -767,7 +767,8 @@ Context::SwapChain Context::createSwapChain(SDL_Window* window) const
 Context::Pipeline Context::createGraphicsPipeline(
     const std::string& spvFilePath,
     const vk::VertexInputBindingDescription& vertexBindingDescription,
-    std::span<const vk::VertexInputAttributeDescription> vertexAttributeDescriptions) const
+    std::span<const vk::VertexInputAttributeDescription> vertexAttributeDescriptions,
+    vk::raii::DescriptorSetLayout&& descriptorSetLayout) const
 {
     // load SPIR-V file
     const std::vector<char> code = readFile(spvFilePath);
@@ -866,10 +867,10 @@ Context::Pipeline Context::createGraphicsPipeline(
     // define pipeline layout
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
         {},
-        0,   // set layout count
-        {},  // set layouts
-        0,   // push counstant range count
-        {}); // push constant ranges
+        1,                     // set layout count
+        &*descriptorSetLayout, // set layouts
+        0,                     // push counstant range count
+        nullptr);              // push constant ranges
 
     vk::raii::PipelineLayout pipelineLayout(*_device, pipelineLayoutInfo);
 
@@ -913,12 +914,30 @@ Context::Pipeline Context::createGraphicsPipeline(
 
     Log::Core::Info("Shader pipeline created");
 
-    return Pipeline(std::move(pipelineLayout), std::move(graphicsPipeline));
+    return Pipeline(
+        std::move(descriptorSetLayout), std::move(pipelineLayout), std::move(graphicsPipeline));
+}
+
+vk::raii::DescriptorSetLayout Context::createDescriptorSetLayout(
+    const vk::DescriptorSetLayoutBinding& uboLayoutBinding) const
+{
+    vk::DescriptorSetLayoutCreateInfo createInfo(
+        {},
+        1,                  // binding count
+        &uboLayoutBinding); // bindings
+    vk::raii::DescriptorSetLayout descriptorSetLayout(*_device, createInfo);
+
+    setDebugName(
+        vk::ObjectType::eDescriptorSetLayout,
+        reinterpret_cast<uint64_t>(&**descriptorSetLayout),
+        "Descriptor Set Layout");
+
+    return descriptorSetLayout;
 }
 
 // Frames //////////////////////////////////////////////////////////////////////////////////////////
 
-Context::Frames Context::createFrames() const
+Context::Frames Context::createFrames(const Pipeline& pipeline) const
 {
     std::vector<Frame> frames;
     frames.reserve(buildInfo.maxFramesInFlight);
@@ -980,12 +999,41 @@ Context::Frames Context::createFrames() const
             reinterpret_cast<uint64_t>(&**inFlightFence),
             std::format("In Flight Fence {}", i));
 
+        // create descriptor pool
+        vk::DescriptorPoolSize descriptorPoolSize(vk::DescriptorType::eUniformBuffer, 1);
+        vk::DescriptorPoolCreateInfo descriptorPoolCreateInfo(
+            vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+            1,                    // max sets
+            1,                    // pool size count
+            &descriptorPoolSize); // pool sizes
+        vk::raii::DescriptorPool descriptorPool(*_device, descriptorPoolCreateInfo);
+
+        setDebugName(
+            vk::ObjectType::eDescriptorPool,
+            reinterpret_cast<uint64_t>(&**descriptorPool),
+            std::format("Descriptor Pool {}", i));
+
+        // create descriptor set
+        vk::DescriptorSetAllocateInfo descriptorSetAllocInfo(
+            descriptorPool,
+            1,                               // descriptor set count
+            &*pipeline.descriptorSetLayout); // descriptor set layouts
+        vk::raii::DescriptorSet descriptorSet =
+            std::move(_device->allocateDescriptorSets(descriptorSetAllocInfo).front());
+
+        setDebugName(
+            vk::ObjectType::eDescriptorSet,
+            reinterpret_cast<uint64_t>(&**descriptorSet),
+            std::format("Descriptor Set {}", i));
+
         frames.emplace_back(
             std::move(gpPool),
             std::move(gpBuffer),
             std::move(transferPool),
             std::move(renderFinishSemaphore),
-            std::move(inFlightFence));
+            std::move(inFlightFence),
+            std::move(descriptorPool),
+            std::move(descriptorSet));
     }
 
     return Frames(std::move(frames), 0);
@@ -1008,7 +1056,8 @@ void Context::drawCurrentFrame(
     Frames& frames,
     Pipeline& pipeline,
     VertexBuffer& vertexBuffer,
-    std::optional<std::reference_wrapper<IndexBuffer>> indexBuffer)
+    std::optional<std::reference_wrapper<IndexBuffer>> indexBuffer,
+    std::optional<std::reference_wrapper<std::vector<UniformBuffer>>> uniformBuffer)
 {
     Frame& frame = frames.frames[frames.currentFrame];
 
@@ -1049,7 +1098,7 @@ void Context::drawCurrentFrame(
     frame.gpPool.reset();
 
     // record the current command buffer
-    recordCommandBuffer(frame, imageIndex, pipeline, vertexBuffer, indexBuffer);
+    recordCommandBuffer(frame, imageIndex, pipeline, vertexBuffer, indexBuffer, uniformBuffer);
 
     // submit the command buffer
     vk::PipelineStageFlags waitDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
@@ -1099,7 +1148,8 @@ void Context::recordCommandBuffer(
     uint32_t imageIndex,
     Pipeline& pipeline,
     VertexBuffer& vertexBuffer,
-    std::optional<std::reference_wrapper<IndexBuffer>> indexBuffer)
+    std::optional<std::reference_wrapper<IndexBuffer>> indexBuffer,
+    std::optional<std::reference_wrapper<std::vector<UniformBuffer>>> uniformBuffer)
 {
     // begin recording
     frame.gpBuffer.begin({});
@@ -1159,6 +1209,15 @@ void Context::recordCommandBuffer(
         0,              // first binding
         **vertexBuffer, // buffer
         {0});           // offsets
+
+    // bind uniform data
+    if (uniformBuffer)
+        frame.gpBuffer.bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics, // pipeline bind point
+            *pipeline.pipelineLayout,         // pipeline layout
+            0,                                // first set
+            *frame.descriptorSet,             // descriptor sets
+            nullptr);                         // dynamic offsets
 
     if (indexBuffer)
     {

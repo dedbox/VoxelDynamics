@@ -1,7 +1,11 @@
 #include <VoxelDynamics.hpp>
 
+#include "VoxelDynamics/Core/Time.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/vector_float2.hpp"
 #include "glm/ext/vector_float3.hpp"
+#include "glm/gtc/matrix_transform.hpp"
+#include "glm/trigonometric.hpp"
 
 // Sandbox App /////////////////////////////////////////////////////////////////////////////////////
 
@@ -31,6 +35,13 @@ struct Vertex
     }
 };
 
+struct UniformBufferObject
+{
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 projection;
+};
+
 class SandboxApp : public Application
 {
 private:
@@ -51,10 +62,19 @@ public:
         , _pipeline(_context.createGraphicsPipeline(
               "shaders/shader.slang.spv",
               Vertex::getBindingDescription(),
-              Vertex::getAttributeDescriptions()))
-        , _frames(_context.createFrames())
+              Vertex::getAttributeDescriptions(),
+              _context.createDescriptorSetLayout(
+                  vk::DescriptorSetLayoutBinding(
+                      0,                                  // binding
+                      vk::DescriptorType::eUniformBuffer, // descriptor type
+                      1,                                  // descriptor count
+                      vk::ShaderStageFlagBits::eVertex,   // shader stages
+                      nullptr)                            // immutable samplers
+                  )))
+        , _frames(_context.createFrames(_pipeline))
         , _vertexBuffer(_context.createVertexBuffer(_frames, _vertices))
         , _indexBuffer(_context.createIndexBuffer(_frames, _indices))
+        , _uniformBuffer(_context.createUniformBuffer<UniformBufferObject>(_frames))
     {
         // connect event listeners
         Event::Bus::Connect<Event::WindowClose, &SandboxApp::onClose>(this);
@@ -108,7 +128,32 @@ public:
 
     void onUpdate(double /*deltaTime*/) override
     {
-        _context.drawCurrentFrame(_window, _frames, _pipeline, _vertexBuffer, _indexBuffer);
+        UniformBufferObject ubo{};
+
+        // rotate 90 degrees per second around z-axis
+        ubo.model = glm::rotate(
+            glm::mat4(1.0F),
+            glm::radians(90.0F) * static_cast<float>(VoxelDynamics::Time::Seconds()),
+            glm::vec3(0.0F, 0.0F, 1.0F));
+
+        // look forward and down at origin with a 45 degree angle
+        ubo.view = glm::lookAt(
+            glm::vec3(2.0F, 2.0F, 2.0F), glm::vec3(0.0F, 0.0F, 0.0F), glm::vec3(0.0F, 0.0F, 1.0F));
+
+        // use perspective projection with 45 degree field of view
+        const auto [width, height] = getWWindowSize();
+        ubo.projection             = glm::perspective(
+            glm::radians(45.0F),
+            static_cast<float>(width) / static_cast<float>(height),
+            0.1F,
+            10.0F);
+
+        // invert y-axis (for glm)
+        ubo.projection[1][1] *= -1;
+
+        _context.updateUniformBuffer(_frames, _uniformBuffer, ubo);
+        _context.drawCurrentFrame(
+            _window, _frames, _pipeline, _vertexBuffer, _indexBuffer, _uniformBuffer);
     }
 
 private:
@@ -116,6 +161,7 @@ private:
     Vulkan::Context::Frames _frames;
     Vulkan::Context::VertexBuffer _vertexBuffer;
     Vulkan::Context::IndexBuffer _indexBuffer;
+    std::vector<Vulkan::Context::UniformBuffer> _uniformBuffer;
 };
 
 // Sandbox App Builder /////////////////////////////////////////////////////////////////////////////

@@ -37,14 +37,19 @@ public:
 
     struct Pipeline
     {
-        vk::raii::PipelineLayout layout;
+        vk::raii::DescriptorSetLayout descriptorSetLayout;
+        vk::raii::PipelineLayout pipelineLayout;
         vk::raii::Pipeline graphics;
     };
 
     Pipeline createGraphicsPipeline(
         const std::string& spvFilePath,
         const vk::VertexInputBindingDescription& vertexBindingDescription,
-        std::span<const vk::VertexInputAttributeDescription> vertexAttributeDescriptions) const;
+        std::span<const vk::VertexInputAttributeDescription> vertexAttributeDescriptions,
+        vk::raii::DescriptorSetLayout&& descriptorSetLayout) const;
+
+    vk::raii::DescriptorSetLayout createDescriptorSetLayout(
+        const vk::DescriptorSetLayoutBinding& uboLayoutBinding) const;
 
     // Frames //////////////////////////////////////////////////////////////////////////////////////
 
@@ -55,6 +60,8 @@ public:
         vk::raii::CommandPool transferPool;
         vk::raii::Semaphore imageAvailableSemaphore;
         vk::raii::Fence inFlightFence;
+        vk::raii::DescriptorPool descriptorPool;
+        vk::raii::DescriptorSet descriptorSet;
     };
 
     struct Frames
@@ -67,25 +74,29 @@ public:
         const Frame& operator[](const size_t i) const { return frames[i]; }
     };
 
-    Frames createFrames() const;
+    Frames createFrames(const Pipeline& pipeline) const;
     void destroyFrames(Frames& frames) const;
 
     struct VertexBuffer;
     struct IndexBuffer;
+    struct UniformBuffer;
 
     void drawCurrentFrame(
         SDL_Window* window,
         Frames& frames,
         Pipeline& pipeline,
         VertexBuffer& vertexBuffer,
-        std::optional<std::reference_wrapper<IndexBuffer>> indexBuffer = std::nullopt);
+        std::optional<std::reference_wrapper<IndexBuffer>> indexBuffer = std::nullopt,
+        std::optional<std::reference_wrapper<std::vector<UniformBuffer>>> uniformBuffer =
+            std::nullopt);
 
     void recordCommandBuffer(
         Frame& frame,
         uint32_t imageIndex,
         Pipeline& pipeline,
         VertexBuffer& vertexBuffer,
-        std::optional<std::reference_wrapper<IndexBuffer>> indexBuffer = std::nullopt);
+        std::optional<std::reference_wrapper<IndexBuffer>> indexBuffer,
+        std::optional<std::reference_wrapper<std::vector<UniformBuffer>>> uniformBuffer);
 
     void transitionImageLayout(
         vk::raii::CommandBuffer& buffer,
@@ -117,7 +128,6 @@ public:
         const std::string& bufferName,
         const std::string& memoryName) const
     {
-
         auto&& [buffer, memory] = createBuffer(
             size,
             vk::BufferUsageFlagBits::eTransferSrc,
@@ -235,6 +245,84 @@ public:
             std::move(semaphore));
 
         return IndexBuffer(std::move(indexBuffer), std::move(indexMemory), indices.size());
+    }
+
+    // Uniform Buffer //////////////////////////////////////////////////////////////////////////////
+
+    struct UniformBuffer
+    {
+        vk::raii::Buffer buffer;
+        vk::raii::DeviceMemory memory;
+        void* mapped;
+    };
+
+    template <typename T>
+    std::vector<UniformBuffer> createUniformBuffer(const Frames& frames) const
+    {
+        std::vector<UniformBuffer> uniformBuffers;
+        uniformBuffers.reserve(buildInfo.maxFramesInFlight);
+
+        for (const size_t i : std::ranges::views::iota(0, buildInfo.maxFramesInFlight))
+        {
+            const Frame& frame = frames[frames.currentFrame];
+
+            // create a uniform buffer
+            vk::DeviceSize size     = sizeof(T);
+            auto&& [buffer, memory] = createBuffer(
+                size,
+                vk::BufferUsageFlagBits::eUniformBuffer,
+                vk::MemoryPropertyFlagBits::eHostVisible |
+                    vk::MemoryPropertyFlagBits::eHostCoherent,
+                std::format("Uniform Buffer {}", i),
+                std::format("Uniform Buffer Memory {}", i));
+            void* mapped = memory.mapMemory(0, size);
+
+            // configure the uniform buffer
+            vk::DescriptorBufferInfo descriptorBufferInfo(
+                *buffer,
+                0,     // offset
+                size); // range
+            vk::WriteDescriptorSet descriptorWrite(
+                *frame.descriptorSet,               // destination set
+                0,                                  // destination binding
+                0,                                  // destination array element
+                1,                                  // descriptor count
+                vk::DescriptorType::eUniformBuffer, // descriptor type
+                nullptr,                            // descriptor image info
+                &descriptorBufferInfo,              // buffer info
+                nullptr);                           // texel buffer view
+            _device->updateDescriptorSets(
+                descriptorWrite, // descriptor writes
+                nullptr);        // descriptor copies
+
+            uniformBuffers.emplace_back(std::move(buffer), std::move(memory), mapped);
+        }
+
+        return uniformBuffers;
+    }
+
+    template <typename T>
+    void updateUniformBuffer(
+        const Frames& frames, const std::vector<UniformBuffer>& uniformBuffers, const T& ubo)
+    {
+        memcpy(uniformBuffers[frames.currentFrame].mapped, &ubo, sizeof(T));
+
+        // vk::DescriptorBufferInfo descriptorBufferInfo(
+        //     *uniformBuffers[frames.currentFrame].buffer,
+        //     0,          // offset
+        //     sizeof(T)); // range
+        // vk::WriteDescriptorSet descriptorWrite(
+        //     *frames[frames.currentFrame].descriptorSet, // destination set
+        //     0,                                          // destination binding
+        //     0,                                          // destination array element
+        //     1,                                          // descriptor count
+        //     vk::DescriptorType::eUniformBuffer,         // descriptor type
+        //     nullptr,                                    // descriptor image info
+        //     &descriptorBufferInfo,                      // buffer info
+        //     nullptr);                                   // texel buffer view
+        // _device->updateDescriptorSets(
+        //     descriptorWrite, // descriptor writes
+        //     nullptr);        // descriptor copies
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
