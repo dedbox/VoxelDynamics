@@ -3,9 +3,9 @@
 #include "SDL3/SDL_video.h"
 #include "vulkan/vulkan_raii.hpp"
 
-#include "VoxelDynamics/Renderer/PhysicalDevice.hpp"
+#include "VoxelDynamics/Vulkan/PhysicalDevice.hpp"
 
-namespace VoxelDynamics::Renderer
+namespace VoxelDynamics::Vulkan
 {
 
 class Context
@@ -77,4 +77,4 @@ private:
         const vk::raii::PhysicalDevice& physicalDevice, const size_t i);
 };
 
-} // namespace VoxelDynamics::Renderer
+} // namespace VoxelDynamics::Vulkan

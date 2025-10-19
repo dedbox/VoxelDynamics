@@ -1,8 +1,8 @@
 #include "SDL3/SDL_vulkan.h"
 
-#include "VoxelDynamics/Renderer/Context.hpp"
+#include "VoxelDynamics/Vulkan/Context.hpp"
 
-namespace VoxelDynamics::Renderer
+namespace VoxelDynamics::Vulkan
 {
 
 Context::Context(
@@ -488,4 +488,4 @@ std::optional<PhysicalDevice::FeaturesChain> Context::CreateFeaturesChain(
     return std::nullopt;
 }
 
-} // namespace VoxelDynamics::Renderer
+} // namespace VoxelDynamics::Vulkan

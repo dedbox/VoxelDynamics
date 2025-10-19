@@ -3,7 +3,7 @@
 #include "SDL3/SDL_events.h"
 
 #include "VoxelDynamics/Core/Window.hpp"
-#include "VoxelDynamics/Renderer/Context.hpp"
+#include "VoxelDynamics/Vulkan/Context.hpp"
 
 namespace VoxelDynamics
 {
@@ -18,7 +18,7 @@ public:
         Log::Level logLevel    = Log::Level::Warn;
         std::string identifier = "com.voxeldynamics.default-app";
         Window::BuildInfo window{};
-        Renderer::Context::BuildInfo context{};
+        Vulkan::Context::BuildInfo context{};
     } buildInfo;
 
     explicit Application(BuildInfo buildInfo);
@@ -44,7 +44,7 @@ public:
 
 protected:
     Window _window;
-    Renderer::Context _context;
+    Vulkan::Context _context;
     bool _done = false;
 
 private:

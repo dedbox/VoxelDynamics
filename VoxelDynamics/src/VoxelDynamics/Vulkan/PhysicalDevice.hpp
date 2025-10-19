@@ -2,7 +2,7 @@
 
 #include "vulkan/vulkan_raii.hpp"
 
-namespace VoxelDynamics::Renderer
+namespace VoxelDynamics::Vulkan
 {
 
 class PhysicalDevice
@@ -30,4 +30,4 @@ public:
     const vk::raii::PhysicalDevice* operator->() const { return &physicalDevice; }
 };
 
-} // namespace VoxelDynamics::Renderer
+} // namespace VoxelDynamics::Vulkan
