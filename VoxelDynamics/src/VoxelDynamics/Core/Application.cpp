@@ -1,41 +1,27 @@
-#include "VoxelDynamics/Core/Application.hpp"
-
-#include "SDL3/SDL_events.h"
 #include "SDL3/SDL_init.h"
+
+#include "VoxelDynamics/Core/Application.hpp"
 
 #include "VoxelDynamics/Core/Event.hpp"
 #include "VoxelDynamics/Core/EventBus.hpp"
-#include "VoxelDynamics/Core/Time.hpp"
-
-template <class... Ts>
-struct overloaded : Ts...
-{
-    using Ts::operator()...;
-};
 
 namespace VoxelDynamics
 {
 
-// Application /////////////////////////////////////////////////////////////////////////////////////
-
-Application::Application(const BuildInfo& buildInfo_)
-    : buildInfo(buildInfo_)
-    , _window(CreateWindow(buildInfo_))
-    , _context(_window, buildInfo_.context)
-    , _lastFrameTime(Time::Seconds())
+Application::Application(BuildInfo buildInfo_)
+    : buildInfo(initialize(std::move(buildInfo_)))
+    , _window(Window(buildInfo.window))
+    , _context(buildInfo.context, buildInfo.name, buildInfo.version, *_window)
 {
 }
 
-Application::~Application()
+Application::BuildInfo&& Application::initialize(BuildInfo&& buildInfo)
 {
-    Log::Core::Info("Terminating {}", buildInfo.context.appName);
-}
-
-SDL_Window* Application::CreateWindow(const BuildInfo& buildInfo)
-{
-    Log::Init(buildInfo.context.appName);
+    // initialize logging subsystem
+    Log::Init(buildInfo.name);
     Log::SetLevel(buildInfo.logLevel);
 
+    // report engine version
     Log::Core::Info(
         "{} {}.{}.{}",
         EngineName,
@@ -43,107 +29,32 @@ SDL_Window* Application::CreateWindow(const BuildInfo& buildInfo)
         vk::versionMinor(EngineVersion),
         vk::versionPatch(EngineVersion));
 
-    const std::string appVersion = std::format(
+    // report application version
+    const std::string version = std::format(
         "{}.{}.{}",
-        vk::versionMajor(buildInfo.context.appVersion),
-        vk::versionMinor(buildInfo.context.appVersion),
-        vk::versionPatch(buildInfo.context.appVersion));
+        vk::versionMajor(buildInfo.version),
+        vk::versionMinor(buildInfo.version),
+        vk::versionPatch(buildInfo.version));
+    Log::Core::Info("Starting {}, version {}", buildInfo.name, version);
 
-    Log::Core::Info("Starting {}, version {}", buildInfo.context.appName, appVersion);
-
+    // report cwd
     const std::string cwd = std::filesystem::current_path();
     Log::Core::Info("Current working directory is {}", cwd);
 
+    // initialize SDL
     if (!SDL_Init(SDL_INIT_VIDEO))
         throw SDLException("Could not initialize SDL");
 
-    if (!SDL_SetAppMetadata(
-            buildInfo.context.appName.c_str(), appVersion.c_str(), buildInfo.identifier.c_str()))
+    if (!SDL_SetAppMetadata(buildInfo.name.c_str(), version.c_str(), buildInfo.identifier.c_str()))
         throw SDLException("Could not set application metadata");
 
-    SDL_WindowFlags flags = SDL_WINDOW_VULKAN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
-    if (buildInfo.resizable)
-        flags |= SDL_WINDOW_RESIZABLE;
-    if (buildInfo.hidden)
-        flags |= SDL_WINDOW_HIDDEN;
-
-    SDL_Window* window = SDL_CreateWindow(
-        buildInfo.title.c_str(),
-        static_cast<int>(buildInfo.width),
-        static_cast<int>(buildInfo.height),
-        flags);
-    if (!window)
-        throw SDLException("Could not create window");
-
-    std::visit(
-        overloaded{
-            [&](DefaultWindowPlacement) {
-                // do nothing
-            },
-
-            [&](CenteredWindowPlacement) {
-                // determine the current screen
-                const SDL_DisplayID displayId = SDL_GetDisplayForWindow(window);
-                if (!displayId)
-                    throw SDLException("Could not find the current screen");
-
-                // get dimensions of the screen
-                const SDL_DisplayMode* mode = SDL_GetCurrentDisplayMode(displayId);
-                if (!mode)
-                    throw SDLException("Could not determine the current screen resolution");
-
-                //  calculate the position of the top-left corner
-                const uint32_t x = (mode->w - buildInfo.width) >> 1U;
-                const uint32_t y = (mode->h - buildInfo.height) >> 1U;
-
-                // apply the calculated position
-                SDL_SetWindowPosition(window, static_cast<int>(x), static_cast<int>(y));
-            },
-
-            [&](FixedWindowPlacement pos) {
-                // apply the given position directly
-                SDL_SetWindowPosition(window, static_cast<int>(pos.x), static_cast<int>(pos.y));
-            },
-        },
-        buildInfo.placement);
-
-    return window;
+    return std::move(buildInfo);
 }
 
-// Window Management ///////////////////////////////////////////////////////////////////////////////
-
-void Application::showWindow() const
+Application::~Application()
 {
-    if (!SDL_ShowWindow(_window))
-        throw SDLException("Could not show window");
+    Log::Core::Info("Terminating {}", buildInfo.name);
 }
-
-void Application::hideWindow() const
-{
-    if (!SDL_HideWindow(_window))
-        throw SDLException("Could not hide window");
-}
-
-std::tuple<uint32_t, uint32_t> Application::getWWindowSize() const
-{
-    int width = 0, height = 0;
-    if (!SDL_GetWindowSizeInPixels(_window, &width, &height))
-        throw SDLException("Could not get window size");
-    return std::make_tuple(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
-}
-
-// Lifetime Management /////////////////////////////////////////////////////////////////////////////
-
-void Application::update()
-{
-    const double frameTime = Time::Seconds();
-    const double deltaTime = frameTime - _lastFrameTime;
-    _lastFrameTime         = frameTime;
-
-    onUpdate(deltaTime);
-}
-
-// Event Handling //////////////////////////////////////////////////////////////////////////////////
 
 void Application::handleSdlEvent(SDL_Event* event)
 {
@@ -155,8 +66,7 @@ void Application::handleSdlEvent(SDL_Event* event)
         break;
 
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
-        int width = 0, height = 0;
-        SDL_GetWindowSizeInPixels(_window, &width, &height);
+        const auto& [width, height] = _window.getSize();
         Event::Bus::Trigger<Event::WindowResuze>(width, height);
         break;
     }

@@ -3,12 +3,9 @@ project(VoxelDynamics)
 
 add_library(
   VoxelDynamics STATIC
-  src/VoxelDynamics/Core/Application.cpp
-  src/VoxelDynamics/Core/ApplicationBuilder.cpp
-  src/VoxelDynamics/Core/Log.cpp
-  src/VoxelDynamics/Core/Time.cpp
-  src/VoxelDynamics/Core/Util.cpp
-  src/VoxelDynamics/Renderer/Vulkan/Context.cpp)
+  src/VoxelDynamics/Core/Application.cpp src/VoxelDynamics/Core/Log.cpp
+  src/VoxelDynamics/Core/Time.cpp src/VoxelDynamics/Core/Util.cpp
+  src/VoxelDynamics/Core/Window.cpp src/VoxelDynamics/Renderer/Context.cpp)
 
 target_link_libraries(VoxelDynamics PUBLIC Vulkan::Vulkan SDL3::SDL3 EnTT::EnTT
                                            spdlog::spdlog)

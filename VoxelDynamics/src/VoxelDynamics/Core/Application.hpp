@@ -1,89 +1,54 @@
 #pragma once
 
 #include "SDL3/SDL_events.h"
-#include "SDL3/SDL_video.h"
 
-#include "VoxelDynamics/Renderer/Vulkan/Context.hpp"
+#include "VoxelDynamics/Core/Window.hpp"
+#include "VoxelDynamics/Renderer/Context.hpp"
 
 namespace VoxelDynamics
 {
 
-// Window Placement ////////////////////////////////////////////////////////////////////////////////
-
-struct DefaultWindowPlacement
-{
-};
-
-struct CenteredWindowPlacement
-{
-};
-
-struct FixedWindowPlacement
-{
-    uint32_t x = 0;
-    uint32_t y = 0;
-};
-
-using WindowPlacement =
-    std::variant<DefaultWindowPlacement, CenteredWindowPlacement, FixedWindowPlacement>;
-
-// Application ////////////////////////////////////////////////////////////////////////////////////
-
 class Application
 {
 public:
-    struct BuildInfo
+    const struct BuildInfo
     {
-        // context
-        Vulkan::Context::BuildInfo context;
-        // window
-        std::string title;
-        uint32_t width;
-        uint32_t height;
-        WindowPlacement placement;
-        bool resizable;
-        bool hidden;
-        // application
-        Log::Level logLevel;
-        std::string identifier;
+        std::string name       = "DefaultApp";
+        uint64_t version       = Version(1, 0, 0);
+        Log::Level logLevel    = Log::Level::Warn;
+        std::string identifier = "com.voxeldynamics.default-app";
+        Window::BuildInfo window{};
+        Renderer::Context::BuildInfo context{};
     } buildInfo;
 
-    explicit Application(const BuildInfo& buildInfo);
+    explicit Application(BuildInfo buildInfo);
 
     virtual ~Application();
 
-    // allow moving
-    Application(Application&&) noexcept            = default;
-    Application& operator=(Application&&) noexcept = default;
+    // prevent move
+    Application(Application&&)            = delete;
+    Application& operator=(Application&&) = delete;
 
-    // prevent copying
+    // prevent copy
     Application(const Application&)            = delete;
     Application& operator=(const Application&) = delete;
 
-    // window management
-    void showWindow() const;
-    void hideWindow() const;
+    // life cycle management
+    void quit() { _done = true; }
+    bool isDone() const { return _done; }
 
-    std::tuple<uint32_t, uint32_t> getWWindowSize() const;
-
-    // lifetime management
-    bool isDone() const { return _isDone; }
-    void quit() { _isDone = true; }
-
-    void update();
+    virtual void onCreate() {}
     virtual void onUpdate(double deltaTime) {}
 
     void handleSdlEvent(SDL_Event* event);
 
 protected:
-    SDL_Window* _window;
-    Vulkan::Context _context;
+    Window _window;
+    Renderer::Context _context;
+    bool _done = false;
 
 private:
-    bool _isDone = false;
-    double _lastFrameTime;
-
-    static SDL_Window* CreateWindow(const BuildInfo& buildInfo);
+    BuildInfo&& initialize(BuildInfo&& buildInfo);
 };
 
 extern std::unique_ptr<Application> CreateApplication();

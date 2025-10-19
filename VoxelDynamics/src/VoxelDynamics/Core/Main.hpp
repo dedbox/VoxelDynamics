@@ -6,12 +6,16 @@
 #include "SDL3/SDL_main.h"
 
 #include "VoxelDynamics/Core/Application.hpp"
+#include "VoxelDynamics/Core/Time.hpp"
+
+using namespace VoxelDynamics;
 
 inline SDL_AppResult SDL_AppInit(void** appstate, int /*argc*/, char** /*argv*/)
 {
     try
     {
-        std::unique_ptr<VoxelDynamics::Application> app = VoxelDynamics::CreateApplication();
+        std::unique_ptr<Application> app = CreateApplication();
+        app->onCreate();
 
         *appstate = app.release();
 
@@ -19,27 +23,33 @@ inline SDL_AppResult SDL_AppInit(void** appstate, int /*argc*/, char** /*argv*/)
     }
     catch (const SDLException& exn)
     {
-        VoxelDynamics::Log::Core::Critical("SDL Error: {}", exn.what());
+        Log::Core::Critical("SDL Error: {}", exn.what());
         return SDL_APP_FAILURE;
     }
 }
 
 inline SDL_AppResult SDL_AppIterate(void* appstate)
 {
+    static double lastFrameTime = Time::Seconds() - 0.016;
+    static double thisFrameTime = Time::Seconds();
+
+    const double deltaTime = thisFrameTime - lastFrameTime;
+    lastFrameTime          = thisFrameTime;
+
     try
     {
-        auto app = static_cast<VoxelDynamics::Application*>(appstate);
+        auto app = static_cast<Application*>(appstate);
 
         if (app->isDone())
             return SDL_APP_SUCCESS;
 
-        app->update();
+        app->onUpdate(deltaTime);
 
         return SDL_APP_CONTINUE;
     }
     catch (const SDLException& exn)
     {
-        VoxelDynamics::Log::Core::Critical("SDL Error: {}", exn.what());
+        Log::Core::Critical("SDL Error: {}", exn.what());
         return SDL_APP_FAILURE;
     }
 }
@@ -48,7 +58,7 @@ inline SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 {
     try
     {
-        auto app = static_cast<VoxelDynamics::Application*>(appstate);
+        auto app = static_cast<Application*>(appstate);
 
         app->handleSdlEvent(event);
 
@@ -56,7 +66,7 @@ inline SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
     }
     catch (const SDLException& exn)
     {
-        VoxelDynamics::Log::Core::Critical("SDL Error: {}", exn.what());
+        Log::Core::Critical("SDL Error: {}", exn.what());
         return SDL_APP_FAILURE;
     }
 }
