@@ -50,8 +50,8 @@ public:
     Window& operator=(const Window&) = delete;
 
     // proxy dereference operator
-    SDL_Window* operator*() { return _window; }
-    const SDL_Window* operator*() const { return _window; }
+    SDL_Window* const& operator*() { return _window; }
+    const SDL_Window* const& operator*() const { return _window; }
 
     void show() const;
     void hide() const;
@@ -59,7 +59,7 @@ public:
     std::pair<uint32_t, uint32_t> getSize() const;
 
 private:
-    SDL_Window* _window;
+    SDL_Window* const _window;
 
     SDL_Window* createWindow() const;
 };

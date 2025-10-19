@@ -5,9 +5,8 @@
 namespace VoxelDynamics::Vulkan
 {
 
-class PhysicalDevice
+struct PhysicalDevice
 {
-public:
     using FeaturesChain = vk::StructureChain<
         vk::PhysicalDeviceFeatures2,
         vk::PhysicalDeviceVulkan13Features,

@@ -1,8 +1,9 @@
 #pragma once
 
-#include "SDL3/SDL_video.h"
 #include "vulkan/vulkan_raii.hpp"
 
+#include "VoxelDynamics/Core/Window.hpp"
+#include "VoxelDynamics/Vulkan/Device.hpp"
 #include "VoxelDynamics/Vulkan/PhysicalDevice.hpp"
 
 namespace VoxelDynamics::Vulkan
@@ -18,10 +19,7 @@ public:
     } buildInfo;
 
     Context(
-        BuildInfo buildInfo,
-        const std::string& appName,
-        const uint64_t appVersion,
-        SDL_Window* window);
+        BuildInfo buildInfo, const std::string& appName, const uint64_t appVersion, Window& window);
 
     ~Context() = default;
 
@@ -33,11 +31,22 @@ public:
     Context(const Context&)            = delete;
     Context& operator=(const Context&) = delete;
 
+    const vk::raii::SurfaceKHR& getSurface() const { return _surface; }
+    const PhysicalDevice& getPhysicalDevice() const { return _physicalDevice; }
+    const Device& getDevice() const { return _device; }
+
+    void setDebugName(vk::ObjectType type, void* handle, const std::string& name) const;
+
+    static std::string SurfaceFormatName(const vk::SurfaceFormatKHR& format);
+    static std::string SurfaceFormatNames(const std::vector<vk::SurfaceFormatKHR>& formats);
+    static std::string PresentModeNames(const std::vector<vk::PresentModeKHR>& presentModes);
+
 private:
     vk::raii::Context _context;
     vk::raii::Instance _instance;
     vk::raii::SurfaceKHR _surface;
     const PhysicalDevice _physicalDevice;
+    const Device _device;
 
     // Instance ////////////////////////////////////////////////////////////////////////////////////
 
@@ -59,22 +68,22 @@ private:
 
     // Surface /////////////////////////////////////////////////////////////////////////////////////
 
-    vk::raii::SurfaceKHR createSurface(SDL_Window* window) const;
+    vk::raii::SurfaceKHR createSurface(Window& window) const;
 
     // Physical Device /////////////////////////////////////////////////////////////////////////////
 
-    PhysicalDevice pickPhysicalDevice() const;
+    const PhysicalDevice pickPhysicalDevice() const;
 
     static constexpr std::vector<const char*> DeviceExtensions();
 
     static bool CheckDeviceExtensions(const std::vector<std::string>&, const size_t i);
 
-    static std::string SurfaceFormatName(const vk::SurfaceFormatKHR& format);
-    static std::string SurfaceFormatNames(const std::vector<vk::SurfaceFormatKHR>& formats);
-    static std::string PresentModeNames(const std::vector<vk::PresentModeKHR>& presentModes);
-
     static std::optional<PhysicalDevice::FeaturesChain> CreateFeaturesChain(
         const vk::raii::PhysicalDevice& physicalDevice, const size_t i);
+
+    // Logical Device //////////////////////////////////////////////////////////////////////////////
+
+    Device createDevice() const;
 };
 
 } // namespace VoxelDynamics::Vulkan

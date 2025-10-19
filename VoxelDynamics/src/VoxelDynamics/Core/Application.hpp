@@ -4,6 +4,7 @@
 
 #include "VoxelDynamics/Core/Window.hpp"
 #include "VoxelDynamics/Vulkan/Context.hpp"
+#include "VoxelDynamics/Vulkan/Renderer.hpp"
 
 namespace VoxelDynamics
 {
@@ -19,6 +20,7 @@ public:
         std::string identifier = "com.voxeldynamics.default-app";
         Window::BuildInfo window{};
         Vulkan::Context::BuildInfo context{};
+        Vulkan::Renderer::BuildInfo renderer{};
     } buildInfo;
 
     explicit Application(BuildInfo buildInfo);
@@ -45,6 +47,7 @@ public:
 protected:
     Window _window;
     Vulkan::Context _context;
+    Vulkan::Renderer _renderer;
     bool _done = false;
 
 private:

@@ -6,11 +6,12 @@ namespace VoxelDynamics::Vulkan
 {
 
 Context::Context(
-    BuildInfo buildInfo_, const std::string& appName, const uint64_t appVersion, SDL_Window* window)
+    BuildInfo buildInfo_, const std::string& appName, const uint64_t appVersion, Window& window)
     : buildInfo(buildInfo_)
     , _instance(createInstance(appName, appVersion))
     , _surface(createSurface(window))
     , _physicalDevice(pickPhysicalDevice())
+    , _device(createDevice())
 {
 }
 
@@ -159,17 +160,17 @@ constexpr vk::DebugUtilsMessengerCreateInfoEXT Context::DebugUtilsMessengerCreat
 
 // Surface /////////////////////////////////////////////////////////////////////////////////////////
 
-vk::raii::SurfaceKHR Context::createSurface(SDL_Window* window) const
+vk::raii::SurfaceKHR Context::createSurface(Window& window) const
 {
     VkSurfaceKHR surface = VK_NULL_HANDLE;
-    if (!SDL_Vulkan_CreateSurface(window, *_instance, nullptr, &surface))
+    if (!SDL_Vulkan_CreateSurface(*window, *_instance, nullptr, &surface))
         throw SDLException("Could not create Vulkan surface");
     return vk::raii::SurfaceKHR(_instance, surface);
 }
 
 // Physical Device /////////////////////////////////////////////////////////////////////////////////
 
-PhysicalDevice Context::pickPhysicalDevice() const
+const PhysicalDevice Context::pickPhysicalDevice() const
 {
     Log::Core::Trace("Picking a physical device...");
 
@@ -431,7 +432,7 @@ bool Context::CheckDeviceExtensions(const std::vector<std::string>& available, c
 
 std::string Context::SurfaceFormatName(const vk::SurfaceFormatKHR& format)
 {
-    return vk::to_string(format.format) + "+" + vk::to_string(format.colorSpace);
+    return vk::to_string(format.format) + " / " + vk::to_string(format.colorSpace);
 }
 
 std::string Context::SurfaceFormatNames(const std::vector<vk::SurfaceFormatKHR>& formats)
@@ -486,6 +487,77 @@ std::optional<PhysicalDevice::FeaturesChain> Context::CreateFeaturesChain(
         return PhysicalDevice::FeaturesChain(want10, want13, want11, wantEDS);
 
     return std::nullopt;
+}
+
+// Logical Device //////////////////////////////////////////////////////////////////////////////////
+
+Device Context::createDevice() const
+{
+    const float queuePriority   = 1.0;
+    const auto queueCreateInfos = [&]() -> std::vector<vk::DeviceQueueCreateInfo> {
+        std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos = {
+            vk::DeviceQueueCreateInfo({}, _physicalDevice.graphicsIndex, 1, &queuePriority),
+        };
+        if (_physicalDevice.graphicsIndex != _physicalDevice.presentIndex)
+            queueCreateInfos.push_back(
+                vk::DeviceQueueCreateInfo({}, _physicalDevice.presentIndex, 1, &queuePriority));
+        if (_physicalDevice.graphicsIndex != _physicalDevice.transferIndex)
+            queueCreateInfos.push_back(
+                vk::DeviceQueueCreateInfo({}, _physicalDevice.transferIndex, 1, &queuePriority));
+        return queueCreateInfos;
+    }();
+
+    const auto extensions = DeviceExtensions();
+
+    const vk::DeviceCreateInfo createInfo(
+        {},
+        queueCreateInfos.size(),
+        queueCreateInfos.data(),
+        0,
+        nullptr,
+        extensions.size(),
+        extensions.data(),
+        &_physicalDevice.features.get<vk::PhysicalDeviceFeatures2>().features,
+        _physicalDevice.features.get<vk::PhysicalDeviceVulkan13Features>());
+
+    auto device        = vk::raii::Device(*_physicalDevice, createInfo);
+    auto graphicsQueue = vk::raii::Queue(device, _physicalDevice.graphicsIndex, 0);
+    auto presentQueue  = vk::raii::Queue(device, _physicalDevice.presentIndex, 0);
+    auto transferQueue = vk::raii::Queue(device, _physicalDevice.transferIndex, 0);
+
+    device.setDebugUtilsObjectNameEXT(
+        vk::DebugUtilsObjectNameInfoEXT(
+            vk::ObjectType::eDevice, reinterpret_cast<uint64_t>(&**device), "Vulkan Device"));
+
+    device.setDebugUtilsObjectNameEXT(
+        vk::DebugUtilsObjectNameInfoEXT(
+            vk::ObjectType::eQueue,
+            reinterpret_cast<uint64_t>(&**graphicsQueue),
+            "Graphics Queue"));
+
+    device.setDebugUtilsObjectNameEXT(
+        vk::DebugUtilsObjectNameInfoEXT(
+            vk::ObjectType::eQueue, reinterpret_cast<uint64_t>(&**presentQueue), "Present Queue"));
+
+    device.setDebugUtilsObjectNameEXT(
+        vk::DebugUtilsObjectNameInfoEXT(
+            vk::ObjectType::eQueue,
+            reinterpret_cast<uint64_t>(&**transferQueue),
+            "Transfer Queue"));
+
+    Log::Core::Info("Logical device created");
+
+    return Device(
+        std::move(device),
+        std::move(graphicsQueue),
+        std::move(presentQueue),
+        std::move(transferQueue));
+}
+
+void Context::setDebugName(vk::ObjectType type, void* handle, const std::string& name) const
+{
+    _device->setDebugUtilsObjectNameEXT(
+        vk::DebugUtilsObjectNameInfoEXT(type, reinterpret_cast<uint64_t>(handle), name.c_str()));
 }
 
 } // namespace VoxelDynamics::Vulkan

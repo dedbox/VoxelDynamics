@@ -11,7 +11,8 @@ namespace VoxelDynamics
 Application::Application(BuildInfo buildInfo_)
     : buildInfo(initialize(std::move(buildInfo_)))
     , _window(Window(buildInfo.window))
-    , _context(buildInfo.context, buildInfo.name, buildInfo.version, *_window)
+    , _context(buildInfo.context, buildInfo.name, buildInfo.version, _window)
+    , _renderer(buildInfo.renderer, &_context, _window)
 {
 }
 
