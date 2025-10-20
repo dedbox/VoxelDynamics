@@ -7,6 +7,14 @@
 namespace VoxelDynamics::Vulkan
 {
 
+/** Uses a Context to construct a SwapChain and implement the high-level drawing logic.
+ *
+ * The Renderer is responsible for creating, resizing, and managing the life cycle of the
+ * SwapChain. It creates a collection of Frame objects for coordinating multiple-frame-in-flight
+ * rendering. In the main loop, the Renderer waits for the previous frame to finish, acquires the
+ * next available SwapChain image, collects any CommandBuffer objects needed for the current frame
+ * from the CommandBufferManager, and submits them to the graphics queue.
+ */
 class Renderer
 {
 public:

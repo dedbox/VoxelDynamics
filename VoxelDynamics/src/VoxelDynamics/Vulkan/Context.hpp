@@ -9,6 +9,16 @@
 namespace VoxelDynamics::Vulkan
 {
 
+/** Performs all platform-specific and high-level Vulkan setup and manages Vulkan handles required
+ * for interacting with the graphics hardware.
+ *
+ * The Context creates the Vulkan instance and window surface which form the bridge between Vulkan
+ * and the native window system. It is responsible for enumerating available physical devices and
+ * constructing a PhysicalDevice object for the most suitable one. The Context uses the chosen
+ * PhysicalDevice to construct a logical Device and obtain queue handles for issuing graphics,
+ * presentation, and bulk data transfer commands. It also provides basic functions for creating
+ * Vulkan buffers and images.
+ */
 class Context
 {
 public:

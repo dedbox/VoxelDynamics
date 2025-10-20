@@ -5,6 +5,14 @@
 namespace VoxelDynamics::Vulkan
 {
 
+/** A single, complete hardware implementation of Vulkan.
+ *
+ * A read-only object used during Context initialization to represent available hardware devices and
+ * their capabilities. It primarily contains command queue family indices (graphics, present,
+ * transfer), available surface formats, present modes (e.g., mailbox, immediate, FIFO), and
+ * available Vulkan features such as support for geometry shaders, 64-bit floats, or specific
+ * texture compression formats.
+ */
 struct PhysicalDevice
 {
     using FeaturesChain = vk::StructureChain<
