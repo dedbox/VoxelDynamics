@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VoxelDynamics/Core/Window.hpp"
+#include "VoxelDynamics/Vulkan/CommandBufferManager.hpp"
 #include "VoxelDynamics/Vulkan/Context.hpp"
 
 namespace VoxelDynamics::Vulkan
@@ -20,22 +21,11 @@ struct SwapChainImageData
 
 /** A container for the resources needed to process one frame of rendering work.
  *
- * Each FrameData object holds dedicated command pools for graphics, present, and transfer
- * operations, along with persistent command buffers for each pool. Each Frame object also includes
- * a semaphore for coordinating access to the associated SwapChain image, and a fence to signal when
- * the frame's work is complete.
+ * Each FrameData object holds a semaphore to prevent multiple frames from writing to the same
+ * SwapChain image at the same time, and a fence to signal when the frame's work is complete.
  */
 struct FrameData
 {
-    vk::raii::CommandPool graphicsPool;
-    vk::raii::CommandBuffer graphicsBuffer;
-
-    vk::raii::CommandPool presentPool;
-    vk::raii::CommandBuffer presentBuffer;
-
-    vk::raii::CommandPool transferPool;
-    vk::raii::CommandBuffer transferBuffer;
-
     vk::raii::Semaphore imageAvailableSemaphore;
     vk::raii::Fence inFlightFence;
 };
@@ -58,10 +48,10 @@ struct SwapChain
     vk::raii::SwapchainKHR swapChain;
     vk::SurfaceFormatKHR surfaceFormat;
     vk::Extent2D extent;
-    bool resized = false;
+    bool resized;
     std::vector<SwapChainImageData> images;
     std::vector<FrameData> frames;
-    uint32_t currentFrame = 0;
+    uint32_t currentFrame;
 };
 
 /** Uses a Context to construct a SwapChain and implement the high-level drawing logic.
@@ -98,6 +88,7 @@ public:
 private:
     const Context* _context;
     SwapChain _swapChain;
+    CommandBufferManager _cmdBufferManager;
 
     // Swap Chain //////////////////////////////////////////////////////////////////////////////////
 

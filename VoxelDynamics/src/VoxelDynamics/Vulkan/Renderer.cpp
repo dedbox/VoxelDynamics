@@ -7,6 +7,7 @@ Renderer::Renderer(BuildInfo buildInfo_, const Context* context, const Window& w
     : buildInfo(buildInfo_)
     , _context(context)
     , _swapChain(createSwapChain(window))
+    , _cmdBufferManager(_context, buildInfo.maxFramesInFlight)
 {
     if (!_context)
         throw std::invalid_argument("Context pointer cannot be null");
@@ -152,16 +153,18 @@ SwapChain Renderer::createSwapChain(const Window& window) const
     auto swapChain = vk::raii::SwapchainKHR(*device, createInfo);
     auto images    = swapChain.getImages();
 
-    _context->setDebugName(vk::ObjectType::eSwapchainKHR, &**swapChain, "Vulkan SwapChain");
+    _context->setDebugName(vk::ObjectType::eSwapchainKHR, &**swapChain, "Vulkan Swap Chain");
 
     // create an image data object for each image in the swap chain
     std::vector<SwapChainImageData> imageDatas;
     imageDatas.reserve(images.size());
 
+    vk::SemaphoreCreateInfo semaphoreCreateInfo{};
+
     for (const auto& [i, image] : std::ranges::views::enumerate(images))
     {
         _context->setDebugName(
-            vk::ObjectType::eImage, &*image, std::format("SwapChain Image {}", i));
+            vk::ObjectType::eImage, &*image, std::format("Swap Chain Image {}", i));
 
         // create image view
         const vk::ImageViewCreateInfo imageViewCreateInfo(
@@ -174,73 +177,41 @@ SwapChain Renderer::createSwapChain(const Window& window) const
         vk::raii::ImageView imageView(*device, imageViewCreateInfo);
 
         _context->setDebugName(
-            vk::ObjectType::eImageView, &**imageView, std::format("SwapChain Image View {}", i));
+            vk::ObjectType::eImageView, &**imageView, std::format("Swap Chain Image View {}", i));
 
         // create "render finished" semaphore
-        vk::raii::Semaphore renderFinishedSemaphore(*device, {});
+        vk::raii::Semaphore semaphore(*device, semaphoreCreateInfo);
 
         _context->setDebugName(
             vk::ObjectType::eSemaphore,
-            &**renderFinishedSemaphore,
+            static_cast<VkSemaphore>(*semaphore),
             std::format("Swap Chain Render Finished Semaphore {}", i));
 
-        imageDatas.emplace_back(image, std::move(imageView), std::move(renderFinishedSemaphore));
+        imageDatas.emplace_back(image, std::move(imageView), std::move(semaphore));
     }
 
     // create a frame data object for each frame-in-flight
     std::vector<FrameData> frameDatas;
     frameDatas.reserve(buildInfo.maxFramesInFlight);
 
-    vk::CommandPoolCreateInfo graphicsPoolCreateInfo(
-        vk::CommandPoolCreateFlagBits::eResetCommandBuffer, physicalDevice.graphicsIndex);
-
-    vk::CommandPoolCreateInfo presentPoolCreateInfo(
-        vk::CommandPoolCreateFlagBits::eResetCommandBuffer, physicalDevice.presentIndex);
-
-    vk::CommandPoolCreateInfo transferPoolCreateInfo(
-        vk::CommandPoolCreateFlagBits::eResetCommandBuffer, physicalDevice.transferIndex);
-
     for (const auto i : std::ranges::views::iota(0U, buildInfo.maxFramesInFlight))
     {
-        // create a graphics pool
-        vk::raii::CommandPool graphicsPool(*device, graphicsPoolCreateInfo);
-
-        _context->setDebugName(
-            vk::ObjectType::eCommandPool, &**graphicsPool, std::format("Graphics Pool {}", i));
-
-        // allocate a graphics command buffer
-        // vk::CommandBufferAllocateInfo graphicsBufferAllocInfo(
-        //     *graphicsPool, vk::CommandBufferLevel::ePrimary, 1);
-        // vk::raii::CommandBuffer graphicsBuffer = std::move(device->allocateCommandBuffers(const
-        // vk::CommandBufferAllocateInfo &allocateInfo)
-
-        // vk::raii::CommandPool graphicsPool;
-        // vk::raii::CommandBuffer graphicsBuffer;
-
-        // vk::raii::CommandPool presentPool;
-        // vk::raii::CommandBuffer presentBuffer;
-
-        // vk::raii::CommandPool transferPool;
-        // vk::raii::CommandBuffer transferBuffer;
-
-        // vk::raii::Semaphore imageAvailableSemaphore;
-        // vk::raii::Fence inFlightFence;
-    }
-
-    // create a semaphore for each image in the swap chain
-    std::vector<vk::raii::Semaphore> imageAvailableSemaphores;
-    imageAvailableSemaphores.reserve(images.size());
-
-    vk::SemaphoreCreateInfo semaphoreCreateInfo{};
-
-    for (const auto i : std::ranges::views::iota(0U, images.size()))
-    {
-        imageAvailableSemaphores.emplace_back(*device, semaphoreCreateInfo);
+        // create "image available" semaphore
+        vk::raii::Semaphore semaphore(*device, semaphoreCreateInfo);
 
         _context->setDebugName(
             vk::ObjectType::eSemaphore,
-            &**imageAvailableSemaphores[i],
-            std::format("Image Available Semaphore {}", i));
+            &**semaphore,
+            std::format("Frame Image Available Semaphore {}", i));
+
+        // create frame-in-flight fence
+        vk::FenceCreateInfo fenceCreateInfo(vk::FenceCreateFlagBits::eSignaled);
+        vk::raii::Fence fence(*device, fenceCreateInfo);
+
+        _context->setDebugName(
+            vk::ObjectType::eFence, &**fence, std::format("Frame In-Flight Fence {}", i));
+
+        frameDatas.emplace_back(std::move(semaphore), std::move(fence));
     }
 
     Log::Core::Info("Swap chain created:");
@@ -249,7 +220,13 @@ SwapChain Renderer::createSwapChain(const Window& window) const
     Log::Core::Info("  present mode: {}", vk::to_string(presentMode));
 
     return SwapChain(
-        std::move(swapChain), surfaceFormat, extent, std::move(imageDatas), std::move(frameDatas));
+        std::move(swapChain),
+        surfaceFormat,
+        extent,
+        false,
+        std::move(imageDatas),
+        std::move(frameDatas),
+        0);
 }
 
 void Renderer::cleanupSwapChain()

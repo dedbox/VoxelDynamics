@@ -8,6 +8,7 @@ add_library(
   src/VoxelDynamics/Core/Time.cpp
   src/VoxelDynamics/Core/Util.cpp
   src/VoxelDynamics/Core/Window.cpp
+  src/VoxelDynamics/Vulkan/CommandBufferManager.cpp
   src/VoxelDynamics/Vulkan/Context.cpp
   src/VoxelDynamics/Vulkan/Renderer.cpp)
 
