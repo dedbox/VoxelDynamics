@@ -9,6 +9,13 @@
 namespace VoxelDynamics
 {
 
+/** The top-level controller and entry point for the graphics engine.
+ *
+ * The Application class encapsulates the core components needed for rendering and drives the main
+ * application loop. It is responsible for the high-level management of the engine, including the
+ * construction of the platform-native window, the graphics context, and the renderer. It also
+ * handles events and performs each iteration of the main update-render loop.
+ */
 class Application
 {
 public:

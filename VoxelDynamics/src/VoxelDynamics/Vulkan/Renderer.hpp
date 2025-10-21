@@ -2,10 +2,67 @@
 
 #include "VoxelDynamics/Core/Window.hpp"
 #include "VoxelDynamics/Vulkan/Context.hpp"
-#include "VoxelDynamics/Vulkan/SwapChain.hpp"
 
 namespace VoxelDynamics::Vulkan
 {
+
+/** A container for the resources needed to present one image to the window surface.
+ *
+ * A SwapChainImageData object contains a render target image, a corresponding image view, and a
+ * semaphore to prevent writing to the image while the presentation engine is still reading from it.
+ */
+struct SwapChainImageData
+{
+    vk::Image image;
+    vk::raii::ImageView imageView;
+    vk::raii::Semaphore renderFinishedSemaphore;
+};
+
+/** A container for the resources needed to process one frame of rendering work.
+ *
+ * Each FrameData object holds dedicated command pools for graphics, present, and transfer
+ * operations, along with persistent command buffers for each pool. Each Frame object also includes
+ * a semaphore for coordinating access to the associated SwapChain image, and a fence to signal when
+ * the frame's work is complete.
+ */
+struct FrameData
+{
+    vk::raii::CommandPool graphicsPool;
+    vk::raii::CommandBuffer graphicsBuffer;
+
+    vk::raii::CommandPool presentPool;
+    vk::raii::CommandBuffer presentBuffer;
+
+    vk::raii::CommandPool transferPool;
+    vk::raii::CommandBuffer transferBuffer;
+
+    vk::raii::Semaphore imageAvailableSemaphore;
+    vk::raii::Fence inFlightFence;
+};
+
+/** Manages a collection of images for presenting graphics to a surface.
+ *
+ * The SwapChain manages the resources needed to render images to the window surface. For each frame
+ * in flight, the SwapChain provides an image as the render target for drawing commands. Once
+ * drawing is complete, the SwapChain selects ts the final image for presentation on the window
+ * surface.
+ *
+ * The SwapChain contains a read-only record of the chosen window surface format and extent, and a
+ * collection of SwapChainImageData objects.
+ *
+ * When the window surface is resized or moved to a different device, the entire SwapChain must be
+ * destroyed and recreated.
+ */
+struct SwapChain
+{
+    vk::raii::SwapchainKHR swapChain;
+    vk::SurfaceFormatKHR surfaceFormat;
+    vk::Extent2D extent;
+    bool resized = false;
+    std::vector<SwapChainImageData> images;
+    std::vector<FrameData> frames;
+    uint32_t currentFrame = 0;
+};
 
 /** Uses a Context to construct a SwapChain and implement the high-level drawing logic.
  *
@@ -20,10 +77,23 @@ class Renderer
 public:
     const struct BuildInfo
     {
-        int maxFramesInFlight = 2;
+        uint32_t maxFramesInFlight = 2;
     } buildInfo;
 
-    Renderer(BuildInfo buildInfo, const Context* context, Window& window);
+    Renderer(BuildInfo buildInfo, const Context* context, const Window& window);
+
+    ~Renderer() = default;
+
+    // prevent move
+    Renderer(Renderer&&) noexcept            = delete;
+    Renderer& operator=(Renderer&&) noexcept = delete;
+
+    // prevent copy
+    Renderer(const Renderer&)            = delete;
+    Renderer& operator=(const Renderer&) = delete;
+
+    void wait() const;
+    void recreateSwapChain(const Window& window);
 
 private:
     const Context* _context;
@@ -31,8 +101,7 @@ private:
 
     // Swap Chain //////////////////////////////////////////////////////////////////////////////////
 
-    SwapChain createSwapChain(Window& window) const;
-
+    SwapChain createSwapChain(const Window& window) const;
     void cleanupSwapChain();
 };
 

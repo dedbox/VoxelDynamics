@@ -9,3 +9,4 @@
 #include <VoxelDynamics/Core/Window.hpp>
 
 #include <VoxelDynamics/Vulkan/Context.hpp>
+#include <VoxelDynamics/Vulkan/Renderer.hpp>

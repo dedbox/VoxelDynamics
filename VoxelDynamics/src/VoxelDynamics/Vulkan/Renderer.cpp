@@ -3,7 +3,7 @@
 namespace VoxelDynamics::Vulkan
 {
 
-Renderer::Renderer(BuildInfo buildInfo_, const Context* context, Window& window)
+Renderer::Renderer(BuildInfo buildInfo_, const Context* context, const Window& window)
     : buildInfo(buildInfo_)
     , _context(context)
     , _swapChain(createSwapChain(window))
@@ -14,7 +14,21 @@ Renderer::Renderer(BuildInfo buildInfo_, const Context* context, Window& window)
     Log::Core::Info("Vulkan renderer initialized");
 }
 
-SwapChain Renderer::createSwapChain(Window& window) const
+void Renderer::wait() const
+{
+    _context->getDevice()->waitIdle();
+}
+
+// Swap Chain //////////////////////////////////////////////////////////////////////////////////////
+
+void Renderer::recreateSwapChain(const Window& window)
+{
+    wait();
+    cleanupSwapChain();
+    createSwapChain(window);
+}
+
+SwapChain Renderer::createSwapChain(const Window& window) const
 {
     Log::Core::Info("Querying surface capabilities:");
 
@@ -140,14 +154,16 @@ SwapChain Renderer::createSwapChain(Window& window) const
 
     _context->setDebugName(vk::ObjectType::eSwapchainKHR, &**swapChain, "Vulkan SwapChain");
 
-    // create a view of each image in the swap chain
-    std::vector<vk::raii::ImageView> imageViews;
-    imageViews.reserve(images.size());
+    // create an image data object for each image in the swap chain
+    std::vector<SwapChainImageData> imageDatas;
+    imageDatas.reserve(images.size());
+
     for (const auto& [i, image] : std::ranges::views::enumerate(images))
     {
         _context->setDebugName(
             vk::ObjectType::eImage, &*image, std::format("SwapChain Image {}", i));
 
+        // create image view
         const vk::ImageViewCreateInfo imageViewCreateInfo(
             {},
             image,
@@ -155,13 +171,60 @@ SwapChain Renderer::createSwapChain(Window& window) const
             surfaceFormat.format,
             {},
             vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
-
-        imageViews.emplace_back(*device, imageViewCreateInfo);
+        vk::raii::ImageView imageView(*device, imageViewCreateInfo);
 
         _context->setDebugName(
-            vk::ObjectType::eImageView,
-            &**imageViews.back(),
-            std::format("SwapChain Image View {}", i));
+            vk::ObjectType::eImageView, &**imageView, std::format("SwapChain Image View {}", i));
+
+        // create "render finished" semaphore
+        vk::raii::Semaphore renderFinishedSemaphore(*device, {});
+
+        _context->setDebugName(
+            vk::ObjectType::eSemaphore,
+            &**renderFinishedSemaphore,
+            std::format("Swap Chain Render Finished Semaphore {}", i));
+
+        imageDatas.emplace_back(image, std::move(imageView), std::move(renderFinishedSemaphore));
+    }
+
+    // create a frame data object for each frame-in-flight
+    std::vector<FrameData> frameDatas;
+    frameDatas.reserve(buildInfo.maxFramesInFlight);
+
+    vk::CommandPoolCreateInfo graphicsPoolCreateInfo(
+        vk::CommandPoolCreateFlagBits::eResetCommandBuffer, physicalDevice.graphicsIndex);
+
+    vk::CommandPoolCreateInfo presentPoolCreateInfo(
+        vk::CommandPoolCreateFlagBits::eResetCommandBuffer, physicalDevice.presentIndex);
+
+    vk::CommandPoolCreateInfo transferPoolCreateInfo(
+        vk::CommandPoolCreateFlagBits::eResetCommandBuffer, physicalDevice.transferIndex);
+
+    for (const auto i : std::ranges::views::iota(0U, buildInfo.maxFramesInFlight))
+    {
+        // create a graphics pool
+        vk::raii::CommandPool graphicsPool(*device, graphicsPoolCreateInfo);
+
+        _context->setDebugName(
+            vk::ObjectType::eCommandPool, &**graphicsPool, std::format("Graphics Pool {}", i));
+
+        // allocate a graphics command buffer
+        // vk::CommandBufferAllocateInfo graphicsBufferAllocInfo(
+        //     *graphicsPool, vk::CommandBufferLevel::ePrimary, 1);
+        // vk::raii::CommandBuffer graphicsBuffer = std::move(device->allocateCommandBuffers(const
+        // vk::CommandBufferAllocateInfo &allocateInfo)
+
+        // vk::raii::CommandPool graphicsPool;
+        // vk::raii::CommandBuffer graphicsBuffer;
+
+        // vk::raii::CommandPool presentPool;
+        // vk::raii::CommandBuffer presentBuffer;
+
+        // vk::raii::CommandPool transferPool;
+        // vk::raii::CommandBuffer transferBuffer;
+
+        // vk::raii::Semaphore imageAvailableSemaphore;
+        // vk::raii::Fence inFlightFence;
     }
 
     // create a semaphore for each image in the swap chain
@@ -186,12 +249,15 @@ SwapChain Renderer::createSwapChain(Window& window) const
     Log::Core::Info("  present mode: {}", vk::to_string(presentMode));
 
     return SwapChain(
-        std::move(swapChain),
-        images,
-        surfaceFormat,
-        extent,
-        std::move(imageViews),
-        std::move(imageAvailableSemaphores));
+        std::move(swapChain), surfaceFormat, extent, std::move(imageDatas), std::move(frameDatas));
+}
+
+void Renderer::cleanupSwapChain()
+{
+
+    _swapChain.swapChain = VK_NULL_HANDLE;
+    _swapChain.images.clear();
+    _swapChain.frames.clear();
 }
 
 } // namespace VoxelDynamics::Vulkan
