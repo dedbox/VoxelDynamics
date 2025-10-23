@@ -10,13 +10,25 @@ add_library(
   src/VoxelDynamics/Core/Window.cpp
   src/VoxelDynamics/Vulkan/CommandBufferManager.cpp
   src/VoxelDynamics/Vulkan/Context.cpp
-  src/VoxelDynamics/Vulkan/Renderer.cpp)
+  src/VoxelDynamics/Vulkan/PipelineManager.cpp
+  src/VoxelDynamics/Vulkan/Renderer.cpp
+  vendor/spirv-reflect/spirv_reflect.c)
 
 target_link_libraries(VoxelDynamics PUBLIC Vulkan::Vulkan SDL3::SDL3 EnTT::EnTT
                                            spdlog::spdlog)
 
-target_include_directories(VoxelDynamics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src
-                                                ${glm_SOURCE_DIR})
+target_include_directories(
+  VoxelDynamics
+  PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src
+         ${CMAKE_CURRENT_SOURCE_DIR}/vendor/spirv-reflect ${glm_SOURCE_DIR})
+
+# SPIRV-Reflect Config #########################################################
+
+set_source_files_properties(vendor/spirv-reflect/spirv_reflect.c
+                            PROPERTIES SKIP_PRECOMPILE_HEADERS TRUE)
+
+target_compile_definitions(VoxelDynamics
+                           PRIVATE SPIRV_REFLECT_USE_SYSTEM_SPIRV_H)
 
 # Compile-time Options #########################################################
 
