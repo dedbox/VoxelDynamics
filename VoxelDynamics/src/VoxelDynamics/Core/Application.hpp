@@ -55,6 +55,7 @@ protected:
     Window _window;
     Vulkan::Context _context;
     Vulkan::Renderer _renderer;
+
     bool _done = false;
 
 private:

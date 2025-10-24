@@ -8,6 +8,7 @@ Renderer::Renderer(BuildInfo buildInfo_, const Context* context, const Window& w
     , _context(context)
     , _swapChain(createSwapChain(window))
     , _cmdBufferManager(_context, buildInfo.maxFramesInFlight)
+    , _pipelineManager(_context, vk::raii::PipelineCache(*_context->getDevice(), {}))
 {
     if (!_context)
         throw std::invalid_argument("Context pointer cannot be null");

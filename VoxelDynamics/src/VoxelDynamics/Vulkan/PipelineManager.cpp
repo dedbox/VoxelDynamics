@@ -5,6 +5,12 @@
 namespace VoxelDynamics::Vulkan
 {
 
+PipelineManager::PipelineManager(const Context* context, vk::raii::PipelineCache pipelineCache)
+    : _context(context)
+    , _pipelineCache(std::move(pipelineCache))
+{
+}
+
 std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> PipelineManager::
     createLayout(const PipelineConfig& config) const
 {

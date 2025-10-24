@@ -3,6 +3,7 @@
 #include "VoxelDynamics/Core/Window.hpp"
 #include "VoxelDynamics/Vulkan/CommandBufferManager.hpp"
 #include "VoxelDynamics/Vulkan/Context.hpp"
+#include "VoxelDynamics/Vulkan/PipelineManager.hpp"
 
 namespace VoxelDynamics::Vulkan
 {
@@ -82,6 +83,8 @@ public:
     Renderer(const Renderer&)            = delete;
     Renderer& operator=(const Renderer&) = delete;
 
+    Vulkan::PipelineManager& getPipelineManager() { return _pipelineManager; }
+
     void wait() const;
     void recreateSwapChain(const Window& window);
 
@@ -89,6 +92,7 @@ private:
     const Context* _context;
     SwapChain _swapChain;
     CommandBufferManager _cmdBufferManager;
+    Vulkan::PipelineManager _pipelineManager;
 
     // Swap Chain //////////////////////////////////////////////////////////////////////////////////
 

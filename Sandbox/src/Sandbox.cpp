@@ -168,7 +168,23 @@
 class Sandbox : public Application
 {
 public:
-    using Application::Application;
+    Sandbox(BuildInfo buildInfo)
+        : Application(std::move(buildInfo))
+        , _graphicsPipeline(createGraphicsPipeline())
+    {
+    }
+
+    const vk::raii::Pipeline& createGraphicsPipeline()
+    {
+        std::vector<vk::Format> formats = {vk::Format::eB8G8R8A8Unorm};
+
+        Vulkan::PipelineConfig config;
+        config.spvCodes.push_back(readFile("shaders/shader.slang.spv"));
+        config.stages = {vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment};
+        config.names  = {"vertMain", "fragMain"};
+        config.renderingCreateInfo.setColorAttachmentFormats(formats);
+        return _renderer.getPipelineManager().getGraphicsPipeline(config);
+    }
 
     void onCreate() override
     {
@@ -200,6 +216,9 @@ public:
 
         Log::Trace("unhandled KeyDown event: {}{}", keyName, event.repeat ? " (repeat)" : "");
     }
+
+private:
+    const vk::raii::Pipeline& _graphicsPipeline;
 };
 
 // Sandbox App Builder /////////////////////////////////////////////////////////////////////////////
