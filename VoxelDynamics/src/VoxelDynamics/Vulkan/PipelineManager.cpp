@@ -18,7 +18,7 @@ std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> 
     std::vector<vk::PushConstantRange> pushConstantRanges;
 
     // discover bindings and push constant ranges
-    for (const auto& spvCode : config.spvCodes)
+    for (const auto& [spvCode, name] : std::ranges::views::zip(config.spvCodes, config.names))
     {
         std::vector<vk::DescriptorSetLayoutBinding> bindings;
 
@@ -27,7 +27,9 @@ std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> 
         SpvReflectResult result =
             spvReflectCreateShaderModule(spvCode.size(), spvCode.data(), &module);
         if (result != SPV_REFLECT_RESULT_SUCCESS)
-            throw std::runtime_error("Could not reflect on SPIR-V module");
+            throw std::runtime_error(std::format("Could not reflect on SPIR-V module `{}'", name));
+
+        Log::Core::Info("Loaded SPIR-V module `{}'", name);
 
         // query descriptor sets
         uint32_t setCount = 0;
@@ -36,14 +38,23 @@ std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> 
         std::vector<SpvReflectDescriptorSet*> sets(setCount);
         spvReflectEnumerateDescriptorSets(&module, &setCount, sets.data());
 
+        Log::Core::Info("Found {} descriptor sets", setCount);
+
         // discover bindings
-        for (const auto& set : sets)
+        for (const auto& [i, set] : std::ranges::views::enumerate(sets))
         {
-            for (const auto& binding :
-                 std::span<SpvReflectDescriptorBinding*>(set->bindings, set->binding_count))
+            for (const auto& [j, binding] : std::ranges::views::enumerate(
+                     std::span<SpvReflectDescriptorBinding*>(set->bindings, set->binding_count)))
             {
                 const auto descriptorCount =
                     std::ranges::fold_left(binding->array.dims, 1, std::multiplies<>{});
+
+                Log::Core::Info(
+                    "Binding set {}, binding {} ({}) has {} descriptors",
+                    i,
+                    j,
+                    binding->name,
+                    descriptorCount);
 
                 vk::DescriptorSetLayoutBinding layoutBinding(
                     binding->binding,
@@ -66,12 +77,18 @@ std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> 
         std::vector<SpvReflectBlockVariable*> blocks(blockCount);
         spvReflectEnumeratePushConstantBlocks(&module, &blockCount, blocks.data());
 
+        Log::Core::Info("Found {} push constant blocks", blockCount);
+
         // discover push constant ranges
-        for (const auto& block : blocks)
+        for (const auto& [i, block] : std::ranges::views::enumerate(blocks))
+        {
+            Log::Core::Info("[{}] {}", i, block->name);
+
             pushConstantRanges.emplace_back(
                 static_cast<vk::ShaderStageFlagBits>(block->decoration_flags),
                 block->offset,
                 block->size);
+        }
 
         spvReflectDestroyShaderModule(&module);
     }
