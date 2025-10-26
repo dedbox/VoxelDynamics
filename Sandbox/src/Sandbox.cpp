@@ -2,8 +2,8 @@
 
 // #include "VoxelDynamics/Core/Time.hpp"
 // #include "glm/ext/matrix_float4x4.hpp"
-// #include "glm/ext/vector_float2.hpp"
-// #include "glm/ext/vector_float3.hpp"
+#include "glm/ext/vector_float2.hpp"
+#include "glm/ext/vector_float3.hpp"
 // #include "glm/gtc/matrix_transform.hpp"
 // #include "glm/trigonometric.hpp"
 
@@ -11,29 +11,29 @@
 
 // using namespace VoxelDynamics;
 
-// struct Vertex
-// {
-//     glm::vec2 position;
-//     glm::vec3 color;
+struct Vertex
+{
+    glm::vec2 position;
+    glm::vec3 color;
 
-//     static vk::VertexInputBindingDescription getBindingDescription()
-//     {
-//         return vk::VertexInputBindingDescription(
-//             0,                             // binding index
-//             sizeof(Vertex),                // stride
-//             vk::VertexInputRate::eVertex); // input rate
-//     }
+    static vk::VertexInputBindingDescription getBindingDescription()
+    {
+        return vk::VertexInputBindingDescription(
+            0,                             // binding index
+            sizeof(Vertex),                // stride
+            vk::VertexInputRate::eVertex); // input rate
+    }
 
-//     static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions()
-//     {
-//         return {
-//             vk::VertexInputAttributeDescription(
-//                 0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, position)),
-//             vk::VertexInputAttributeDescription(
-//                 1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)),
-//         };
-//     }
-// };
+    static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions()
+    {
+        return {
+            vk::VertexInputAttributeDescription(
+                0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, position)),
+            vk::VertexInputAttributeDescription(
+                1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)),
+        };
+    }
+};
 
 // struct UniformBufferObject
 // {
@@ -176,13 +176,70 @@ public:
 
     const vk::raii::Pipeline& createGraphicsPipeline()
     {
-        std::vector<vk::Format> formats = {vk::Format::eB8G8R8A8Unorm};
-
         Vulkan::PipelineConfig config;
-        config.spvCodes.push_back(readFile("shaders/shader.slang.spv"));
-        config.stages = {vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment};
-        config.names  = {"vertMain", "fragMain"};
-        config.renderingCreateInfo.setColorAttachmentFormats(formats);
+        config.spvCode = readFile("shaders/shader.slang.spv");
+        config.stages  = {vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment};
+        config.names   = {"vertMain", "fragMain"};
+
+        const auto& vertexBindingDescription         = Vertex::getBindingDescription();
+        const auto& vertexInputAttributeDescriptions = Vertex::getAttributeDescriptions();
+
+        config.vertexInpuState = vk::PipelineVertexInputStateCreateInfo(
+            {},                                // flags
+            vertexBindingDescription,          // vertex binding descriptions
+            vertexInputAttributeDescriptions); // vertex input attribute descriptions
+
+        config.inputAssemblyState = vk::PipelineInputAssemblyStateCreateInfo(
+            {},                                   // flags
+            vk::PrimitiveTopology::eTriangleList, // topology
+            vk::False);                           // primitive restart enabled
+
+        config.rasterizationState = vk::PipelineRasterizationStateCreateInfo(
+            {},                          // flags
+            vk::False,                   // depth clamp enabled
+            vk::False,                   // rasterizer discard enabled
+            vk::PolygonMode::eFill,      // polygon mode
+            vk::CullModeFlagBits::eBack, // cull mode
+            vk::FrontFace::eClockwise,   // front face
+            vk::False,                   // depth bias enabled
+            {},                          // depth bias constant factor
+            {},                          // depth bias clamp
+            1.0F,                        // depth bias slope factor
+            1.0F);                       // line width
+
+        config.multisampleState = vk::PipelineMultisampleStateCreateInfo(
+            {},                          // flags
+            vk::SampleCountFlagBits::e1, // rasterization samples
+            vk::False,                   // sample shading enabled
+            0,                           // minimum sample shading
+            nullptr,                     // sample mask
+            vk::False,                   // alpha to coverage enabled
+            vk::False);                  // alpha to one enabled
+
+        vk::PipelineColorBlendAttachmentState colorBlendAttachment(
+            vk::False,                       // blend enabled
+            vk::BlendFactor::eZero,          // source color blend factor
+            vk::BlendFactor::eZero,          // destination color blend factor
+            vk::BlendOp::eAdd,               // color blend operation
+            vk::BlendFactor::eZero,          // source alpha blend factor
+            vk::BlendFactor::eZero,          // destination alpha blend factor
+            vk::BlendOp::eAdd,               // alpha blend operation
+            vk::ColorComponentFlagBits::eR | // color write mask
+                vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB |
+                vk::ColorComponentFlagBits::eA);
+
+        config.colorBlendState = vk::PipelineColorBlendStateCreateInfo(
+            {},                    // flags
+            vk::False,             // logical operation enabled
+            vk::LogicOp::eCopy,    // logical operation
+            colorBlendAttachment); // color blend attachments
+
+        config.renderingCreateInfo = vk::PipelineRenderingCreateInfo(
+            {},                                            // view mask
+            _renderer.getSwapChain().surfaceFormat.format, // color attachment formats
+            vk::Format::eUndefined,                        // depth attachment format
+            vk::Format::eUndefined);                       // stencil attachment format
+
         return _renderer.getPipelineManager().getGraphicsPipeline(config);
     }
 

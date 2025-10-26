@@ -83,6 +83,8 @@ public:
     Renderer(const Renderer&)            = delete;
     Renderer& operator=(const Renderer&) = delete;
 
+    const SwapChain& getSwapChain() const { return _swapChain; }
+
     Vulkan::PipelineManager& getPipelineManager() { return _pipelineManager; }
 
     void wait() const;
