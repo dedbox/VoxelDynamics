@@ -216,7 +216,7 @@ private:
     const vk::raii::Pipeline& createGraphicsPipeline()
     {
         Vulkan::PipelineConfig config;
-        config.spvCode = readFile("shaders/shader.slang.spv");
+        config.spvCode = readFile("shaders/shader1.slang.spv");
         config.stages  = {vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment};
         config.names   = {"vertMain", "fragMain"};
 
