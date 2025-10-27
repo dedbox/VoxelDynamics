@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VoxelDynamics/Vulkan/Context.hpp"
+#include "VoxelDynamics/Vulkan/RenderQueue.hpp"
 
 namespace VoxelDynamics::Vulkan
 {
@@ -37,7 +38,6 @@ public:
 private:
     const Context* _context;
     vk::raii::CommandPool _commandPool;
-    std::vector<vk::raii::CommandBuffer> _allocatedBufers;
 
     vk::raii::CommandPool createCommandPool(
         uint32_t queueFamilyIndex,
@@ -59,8 +59,8 @@ public:
         GraphicsStatic,
         /** Graphics command buffers that are recorded every frame. */
         GraphicsDynamic,
-        /** Transfer command buffers that are recorded for one-shot, transient transfers. */
-        TransferOnce,
+        /** Transfer command buffers that are recorded once or infrequently. */
+        TransferStatic,
         /** Transfer command buffers for repeated transfers within a frame. */
         TransferDynamic,
     };
@@ -77,19 +77,28 @@ public:
     CommandBufferManager(const CommandBufferManager&)            = delete;
     CommandBufferManager& operator=(const CommandBufferManager&) = delete;
 
+    vk::raii::CommandBuffer allocateOneShotBuffer(
+        RenderQueue queue, vk::CommandBufferLevel level) const;
+
     vk::raii::CommandBuffer allocatePrimaryBuffer(UsageProfile profile, uint32_t frameIndex) const;
 
     vk::raii::CommandBuffer allocateSecondaryBuffer(
         UsageProfile profile, uint32_t frameIndex) const;
 
+    void resetOneShotBuffers();
     void resetDynamicBuffers(uint32_t frameIndex);
+
+    uint32_t getQueueFamilyIndex(RenderQueue queue) const;
+    const vk::raii::Queue& getQueue(RenderQueue queue) const;
 
 private:
     const Context* _context;
 
+    CommandPoolAllocator _graphicsOncePool;
     CommandPoolAllocator _graphicsStaticPool;
     std::vector<CommandPoolAllocator> _graphicsDynamicPools;
 
+    CommandPoolAllocator _transferOncePool;
     CommandPoolAllocator _transferStaticPool;
     std::vector<CommandPoolAllocator> _transferDynamicPools;
 

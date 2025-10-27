@@ -46,6 +46,8 @@ public:
     void quit() { _done = true; }
     bool isDone() const { return _done; }
 
+    void onCreated() { _renderer.resetOneShotBuffers(); }
+
     virtual void onCreate() {}
     virtual void onUpdate(double deltaTime) {}
 

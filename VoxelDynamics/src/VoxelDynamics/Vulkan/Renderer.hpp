@@ -4,6 +4,7 @@
 #include "VoxelDynamics/Vulkan/CommandBufferManager.hpp"
 #include "VoxelDynamics/Vulkan/Context.hpp"
 #include "VoxelDynamics/Vulkan/PipelineManager.hpp"
+#include "VoxelDynamics/Vulkan/RenderQueue.hpp"
 
 namespace VoxelDynamics::Vulkan
 {
@@ -53,6 +54,14 @@ struct SwapChain
     std::vector<SwapChainImageData> images;
     std::vector<FrameData> frames;
     uint32_t currentFrame;
+
+    // proxy dereference operator
+    vk::raii::SwapchainKHR& operator*() { return swapChain; }
+    const vk::raii::SwapchainKHR& operator*() const { return swapChain; }
+
+    // proxy arrow operator
+    vk::raii::SwapchainKHR* operator->() { return &swapChain; }
+    const vk::raii::SwapchainKHR* operator->() const { return &swapChain; }
 };
 
 /** Uses a Context to construct a SwapChain and implement the high-level drawing logic.
@@ -87,8 +96,13 @@ public:
 
     Vulkan::PipelineManager& getPipelineManager() { return _pipelineManager; }
 
+    void resetOneShotBuffers();
     void wait() const;
-    void recreateSwapChain(const Window& window);
+
+    void transferVertexData(const void* data, size_t size) const;
+    void transferIndexData(const void* data, size_t size) const;
+
+    using CommandRecorder = std::function<void(const vk::raii::CommandBuffer&)>;
 
 private:
     const Context* _context;
@@ -98,8 +112,32 @@ private:
 
     // Swap Chain //////////////////////////////////////////////////////////////////////////////////
 
+    void recreateSwapChain(const Window& window);
     SwapChain createSwapChain(const Window& window) const;
     void cleanupSwapChain();
+
+    const FrameData& getCurrentFrameData() const;
+
+    // Command Buffers /////////////////////////////////////////////////////////////////////////////
+
+    std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> createBuffer(
+        vk::DeviceSize size,
+        vk::BufferUsageFlags usage,
+        vk::MemoryPropertyFlags properties,
+        const std::string& bufferName,
+        const std::string& memoryName) const;
+
+    uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
+
+    void createAndTransferBuffer(
+        vk::BufferUsageFlagBits usage,
+        RenderQueue destQueue,
+        const vk::PipelineStageFlagBits2 stage,
+        const vk::AccessFlagBits2 access,
+        const void* data,
+        size_t size,
+        const std::string& bufferName,
+        const std::string& memoryName) const;
 };
 
 } // namespace VoxelDynamics::Vulkan

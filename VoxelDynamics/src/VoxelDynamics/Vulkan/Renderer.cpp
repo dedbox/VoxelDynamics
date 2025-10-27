@@ -16,9 +16,40 @@ Renderer::Renderer(BuildInfo buildInfo_, const Context* context, const Window& w
     Log::Core::Info("Vulkan renderer initialized");
 }
 
+void Renderer::resetOneShotBuffers()
+{
+    _cmdBufferManager.resetOneShotBuffers();
+}
+
 void Renderer::wait() const
 {
     _context->getDevice()->waitIdle();
+}
+
+void Renderer::transferVertexData(const void* data, size_t size) const
+{
+    createAndTransferBuffer(
+        vk::BufferUsageFlagBits::eVertexBuffer,
+        RenderQueue::Graphics,
+        vk::PipelineStageFlagBits2::eVertexAttributeInput,
+        vk::AccessFlagBits2::eVertexAttributeRead,
+        data,
+        size,
+        "Vertex Buffer",
+        "Vertex Buffer Memory");
+}
+
+void Renderer::transferIndexData(const void* data, size_t size) const
+{
+    createAndTransferBuffer(
+        vk::BufferUsageFlagBits::eIndexBuffer,
+        RenderQueue::Graphics,
+        vk::PipelineStageFlagBits2::eIndexInput,
+        vk::AccessFlagBits2::eIndexRead,
+        data,
+        size,
+        "Index Buffer",
+        "Index Buffer Memory");
 }
 
 // Swap Chain //////////////////////////////////////////////////////////////////////////////////////
@@ -236,6 +267,182 @@ void Renderer::cleanupSwapChain()
     _swapChain.swapChain = VK_NULL_HANDLE;
     _swapChain.images.clear();
     _swapChain.frames.clear();
+}
+
+const FrameData& Renderer::getCurrentFrameData() const
+{
+    return _swapChain.frames[_swapChain.currentFrame];
+}
+
+// Command Buffers /////////////////////////////////////////////////////////////////////////////////
+
+std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> Renderer::createBuffer(
+    vk::DeviceSize size,
+    vk::BufferUsageFlags usage,
+    vk::MemoryPropertyFlags properties,
+    const std::string& bufferName,
+    const std::string& memoryName) const
+{
+    const auto& device = _context->getDevice();
+
+    // create buffer handle
+    vk::BufferCreateInfo createInfo({}, size, usage, vk::SharingMode::eExclusive);
+    vk::raii::Buffer buffer(*device, createInfo);
+
+    _context->setDebugName(vk::ObjectType::eBuffer, &**buffer, bufferName);
+
+    // allocate buffer memory
+    const auto memReqs = buffer.getMemoryRequirements();
+    const auto memType = findMemoryType(memReqs.memoryTypeBits, properties);
+
+    vk::MemoryAllocateInfo allocInfo(memReqs.size, memType);
+    vk::raii::DeviceMemory memory(*device, allocInfo);
+
+    _context->setDebugName(vk::ObjectType::eDeviceMemory, &**memory, memoryName);
+
+    // associate the memory with the handle
+    buffer.bindMemory(*memory, 0);
+
+    return std::make_pair(std::move(buffer), std::move(memory));
+}
+
+uint32_t Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const
+{
+    // query available memory types
+    vk::PhysicalDeviceMemoryProperties memProps =
+        _context->getPhysicalDevice()->getMemoryProperties();
+
+    // find a suitable type
+    for (const auto& [i, memType] : std::ranges::views::enumerate(memProps.memoryTypes))
+        if ((typeFilter * (1U << static_cast<uint32_t>(i))) &&
+            (memType.propertyFlags & properties) == properties)
+            return i;
+
+    throw std::runtime_error("Could not find a suitable memory type");
+}
+
+void Renderer::createAndTransferBuffer(
+    vk::BufferUsageFlagBits usage,
+    RenderQueue destQueue,
+    const vk::PipelineStageFlagBits2 stage,
+    const vk::AccessFlagBits2 access,
+    const void* data,
+    size_t size,
+    const std::string& bufferName,
+    const std::string& memoryName) const
+{
+    const auto& device         = _context->getDevice();
+    const auto& physicalDevice = _context->getPhysicalDevice();
+
+    // allocate a host buffer
+    auto&& [hostBuffer, hostMemory] = createBuffer(
+        size,
+        vk::BufferUsageFlagBits::eTransferSrc,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+        std::format("Host {}", bufferName),
+        std::format("Host {}", memoryName));
+
+    // copy data to the host buffer
+    void* bufferData = hostMemory.mapMemory(0, size);
+    memcpy(bufferData, data, size);
+    hostMemory.unmapMemory();
+
+    // allocate a device-local buffer
+    auto&& [deviceBuffer, deviceMemory] = createBuffer(
+        size,
+        usage | vk::BufferUsageFlagBits::eTransferDst,
+        vk::MemoryPropertyFlagBits::eDeviceLocal,
+        std::format("Device {}", bufferName),
+        std::format("Device {}", memoryName));
+
+    // create a transfer command buffer
+    auto&& hostCmdBuffer = _cmdBufferManager.allocateOneShotBuffer(
+        RenderQueue::Transfer, vk::CommandBufferLevel::ePrimary);
+
+    // begin recording
+    hostCmdBuffer.begin(vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
+
+    // copy host buffer to device-local buffer
+    hostCmdBuffer.copyBuffer(*hostBuffer, *deviceBuffer, vk::BufferCopy(0, 0, size));
+
+    // host releases ownership of copied data
+    const auto destIndex = _cmdBufferManager.getQueueFamilyIndex(destQueue);
+    vk::BufferMemoryBarrier2 releaseBarrier(
+        vk::PipelineStageFlagBits2::eTransfer, // source stage mask
+        vk::AccessFlagBits2::eTransferWrite,   // source access mask
+        vk::PipelineStageFlagBits2::eNone,     // destination stage mask
+        vk::AccessFlagBits2::eNone,            // destination access mask
+        physicalDevice.transferIndex,          // source queue family index
+        destIndex,                             // destination queue family index
+        deviceBuffer,                          // the resource being transferred
+        0,                                     // offset
+        vk::WholeSize);                        // size
+
+    vk::DependencyInfo releaseDepInfo({}, nullptr, releaseBarrier, nullptr);
+    hostCmdBuffer.pipelineBarrier2(releaseDepInfo);
+
+    // end recording
+    hostCmdBuffer.end();
+
+    // create an acquired-released semaphore
+    vk::raii::Semaphore semaphore(*device, vk::SemaphoreCreateInfo());
+
+    _context->setDebugName(vk::ObjectType::eSemaphore, &**semaphore, "One-Shot Transfer Semaphore");
+
+    // signal the semaphore after releasing
+    vk::SemaphoreSubmitInfo signalSemaphoreInfo(
+        *semaphore, {}, vk::PipelineStageFlagBits2::eTransfer);
+
+    // submit the command buffer
+    vk::CommandBufferSubmitInfo hostCmdBufferSubmitInfo(hostCmdBuffer);
+    vk::SubmitInfo2 hostHubmitInfo({}, {}, hostCmdBufferSubmitInfo, signalSemaphoreInfo);
+    _cmdBufferManager.getQueue(RenderQueue::Transfer).submit2(hostHubmitInfo);
+
+    // create a destination command buffer
+    auto&& deviceCmdBuffer =
+        _cmdBufferManager.allocateOneShotBuffer(destQueue, vk::CommandBufferLevel::ePrimary);
+
+    // begin recording
+    deviceCmdBuffer.begin(
+        vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
+
+    // device acquires ownership of copied data
+    vk::BufferMemoryBarrier2 acquireBarrier(
+        vk::PipelineStageFlagBits2::eNone, // source stage mask
+        vk::AccessFlagBits2::eNone,        // source access mask
+        stage,                             // first stage where the data is used
+        access,                            // first access type
+        physicalDevice.transferIndex,      // source queue family index
+        destIndex,                         // destination queue family index
+        deviceBuffer,                      // the resource being transferred
+        0,                                 // offset
+        vk::WholeSize);                    // size
+
+    vk::DependencyInfo acquireDepInfo({}, nullptr, acquireBarrier, nullptr);
+    deviceCmdBuffer.pipelineBarrier2(acquireDepInfo);
+
+    // end recording
+    deviceCmdBuffer.end();
+
+    // wait on semaphore before acquiring
+    vk::SemaphoreSubmitInfo waitSemaphoreInfo(*std::move(semaphore), {}, stage);
+
+    // create an end-of-submission fence
+    vk::raii::Fence fence(*device, vk::FenceCreateInfo());
+
+    // submit the command buffer
+    vk::CommandBufferSubmitInfo deviceCmdBufferSubmitInfo(deviceCmdBuffer);
+    vk::SubmitInfo2 deviceSubmitInfo({}, waitSemaphoreInfo, deviceCmdBufferSubmitInfo, {});
+    _cmdBufferManager.getQueue(destQueue).submit2(deviceSubmitInfo, *fence);
+
+    // wait for end of sumission
+    if (device->waitForFences(*fence, vk::True, std::numeric_limits<uint64_t>::max()) !=
+        vk::Result::eSuccess)
+        throw std::runtime_error("Could not wait for fence");
+
+    device->resetFences(*fence);
+
+    Log::Core::Info("Uploaded {} bytes ({}) to {} queue", size, bufferName, toString(destQueue));
 }
 
 } // namespace VoxelDynamics::Vulkan

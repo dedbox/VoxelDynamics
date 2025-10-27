@@ -9,32 +9,6 @@
 
 // Sandbox App /////////////////////////////////////////////////////////////////////////////////////
 
-// using namespace VoxelDynamics;
-
-struct Vertex
-{
-    glm::vec2 position;
-    glm::vec3 color;
-
-    static vk::VertexInputBindingDescription getBindingDescription()
-    {
-        return vk::VertexInputBindingDescription(
-            0,                             // binding index
-            sizeof(Vertex),                // stride
-            vk::VertexInputRate::eVertex); // input rate
-    }
-
-    static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions()
-    {
-        return {
-            vk::VertexInputAttributeDescription(
-                0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, position)),
-            vk::VertexInputAttributeDescription(
-                1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)),
-        };
-    }
-};
-
 // struct UniformBufferObject
 // {
 //     glm::mat4 model;
@@ -44,18 +18,6 @@ struct Vertex
 
 // class SandboxApp : public Application
 // {
-// private:
-//     const std::vector<Vertex> _vertices = {
-//         // clang-format off
-//         {.position={-0.5F, -0.5F}, .color={1.0F, 0.0F, 0.0F}},
-//         {.position={ 0.5F, -0.5F}, .color={0.0F, 1.0F, 0.0F}},
-//         {.position={ 0.5F,  0.5F}, .color={0.0F, 0.0F, 1.0F}},
-//         {.position={-0.5F,  0.5F}, .color={1.0F, 1.0F, 1.0F}},
-//         // clang-format on
-//     };
-
-//     const std::vector<uint16_t> _indices = {0, 1, 2, 2, 3, 0};
-
 // public:
 //     explicit SandboxApp(const Application::BuildInfo& buildInfo)
 //         : Application(buildInfo)
@@ -165,14 +127,91 @@ struct Vertex
 //     std::vector<Vulkan::Context::UniformBuffer> _uniformBuffer;
 // };
 
+using namespace VoxelDynamics;
+
+struct Vertex
+{
+    glm::vec2 position;
+    glm::vec3 color;
+
+    static vk::VertexInputBindingDescription getBindingDescription()
+    {
+        return vk::VertexInputBindingDescription(
+            0,                             // binding index
+            sizeof(Vertex),                // stride
+            vk::VertexInputRate::eVertex); // input rate
+    }
+
+    static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions()
+    {
+        return {
+            vk::VertexInputAttributeDescription(
+                0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, position)),
+            vk::VertexInputAttributeDescription(
+                1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)),
+        };
+    }
+};
+
 class Sandbox : public Application
 {
+private:
+    const std::vector<Vertex> _vertices = {
+        // clang-format off
+        {.position={-0.5F, -0.5F}, .color={1.0F, 0.0F, 0.0F}},
+        {.position={ 0.5F, -0.5F}, .color={0.0F, 1.0F, 0.0F}},
+        {.position={ 0.5F,  0.5F}, .color={0.0F, 0.0F, 1.0F}},
+        {.position={-0.5F,  0.5F}, .color={1.0F, 1.0F, 1.0F}},
+        // clang-format on
+    };
+
+    const std::vector<uint16_t> _indices = {0, 1, 2, 2, 3, 0};
+
 public:
-    Sandbox(BuildInfo buildInfo)
+    explicit Sandbox(BuildInfo buildInfo)
         : Application(std::move(buildInfo))
         , _graphicsPipeline(createGraphicsPipeline())
     {
     }
+
+    void onCreate() override
+    {
+        // upload mesh data
+        _renderer.transferVertexData(_vertices.data(), _vertices.size() * sizeof(Vertex));
+        _renderer.transferIndexData(_indices.data(), _indices.size() * sizeof(uint16_t));
+
+        // connect event listeners
+        Event::Bus::Connect<Event::WindowClose, &Sandbox::onClose>(this);
+        Event::Bus::Connect<Event::KeyDown, &Sandbox::onKeyDown>(this);
+
+        // unhide the window
+        _window.show();
+    }
+
+    void onClose() { quit(); }
+
+    void onKeyDown(const Event::KeyDown& event)
+    {
+        switch (event.key)
+        {
+        case SDLK_ESCAPE:
+            quit();
+            return;
+
+        default:
+            break;
+        }
+
+        const auto keyName = [&]() -> std::string {
+            const std::string name = SDL_GetKeyName(event.key);
+            return !name.empty() ? name : std::format("<key {}>", event.key);
+        }();
+
+        Log::Trace("unhandled KeyDown event: {}{}", keyName, event.repeat ? " (repeat)" : "");
+    }
+
+private:
+    const vk::raii::Pipeline& _graphicsPipeline;
 
     const vk::raii::Pipeline& createGraphicsPipeline()
     {
@@ -242,75 +281,11 @@ public:
 
         return _renderer.getPipelineManager().getGraphicsPipeline(config);
     }
-
-    void onCreate() override
-    {
-        // connect event listeners
-        Event::Bus::Connect<Event::WindowClose, &Sandbox::onClose>(this);
-        Event::Bus::Connect<Event::KeyDown, &Sandbox::onKeyDown>(this);
-
-        _window.show();
-    }
-
-    void onClose() { quit(); }
-
-    void onKeyDown(const Event::KeyDown& event)
-    {
-        switch (event.key)
-        {
-        case SDLK_ESCAPE:
-            quit();
-            return;
-
-        default:
-            break;
-        }
-
-        const auto keyName = [&]() -> std::string {
-            const std::string name = SDL_GetKeyName(event.key);
-            return !name.empty() ? name : std::format("<key {}>", event.key);
-        }();
-
-        Log::Trace("unhandled KeyDown event: {}{}", keyName, event.repeat ? " (repeat)" : "");
-    }
-
-private:
-    const vk::raii::Pipeline& _graphicsPipeline;
 };
-
-// Sandbox App Builder /////////////////////////////////////////////////////////////////////////////
-
-// class SanndboxAppBuilder : public ApplicationBuilder
-// {
-// public:
-//     SanndboxAppBuilder()
-//     {
-//         _name      = "Sandbox";
-//         _placement = VoxelDynamics::CenteredWindowPlacement();
-//         _hidden    = true;
-//         _resizable = true;
-//         _logLevel  = VoxelDynamics::Log::Level::Debug;
-//     }
-
-//     // allow copying
-//     SanndboxAppBuilder(const SanndboxAppBuilder&)            = default;
-//     SanndboxAppBuilder& operator=(const SanndboxAppBuilder&) = default;
-
-//     // prevent moving
-//     SanndboxAppBuilder(SanndboxAppBuilder&&)            = delete;
-//     SanndboxAppBuilder& operator=(SanndboxAppBuilder&&) = delete;
-
-//     ~SanndboxAppBuilder() override = default;
-
-//     std::unique_ptr<Application> build() const override
-//     {
-//         return std::make_unique<SandboxApp>(GetBuildInfo());
-//     }
-// };
 
 // Entry Point /////////////////////////////////////////////////////////////////////////////////////
 
-std::unique_ptr<VoxelDynamics::Application> VoxelDynamics::CreateApplication()
+std::unique_ptr<Application> VoxelDynamics::CreateApplication()
 {
     const Application::BuildInfo buildInfo{
         .name     = "SandboxApp",

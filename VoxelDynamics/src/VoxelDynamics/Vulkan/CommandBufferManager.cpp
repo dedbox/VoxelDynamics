@@ -42,23 +42,33 @@ vk::raii::CommandBuffer CommandPoolAllocator::allocateCommandBuffer(
 void CommandPoolAllocator::reset()
 {
     if (*_commandPool)
-    {
         _commandPool.reset();
-        _allocatedBufers.clear();
-    }
 }
 
 // Command Buffer Manager //////////////////////////////////////////////////////////////////////////
 
 CommandBufferManager::CommandBufferManager(const Context* context, uint32_t maxFramesInFlight)
     : _context(context)
+    , _graphicsOncePool(
+          context,
+          context->getPhysicalDevice().graphicsIndex,
+          vk::CommandPoolCreateFlagBits::eTransient,
+          "Graphics One-Shot Command Pool")
     , _graphicsStaticPool(
-          context, context->getPhysicalDevice().graphicsIndex, {}, "Graphics Static Command Pool")
+          context,
+          context->getPhysicalDevice().graphicsIndex,
+          vk::CommandPoolCreateFlagBits::eTransient,
+          "Graphics Static Command Pool")
     , _graphicsDynamicPools(createPoolAllocators(
           maxFramesInFlight,
           context->getPhysicalDevice().graphicsIndex,
           vk::CommandPoolCreateFlagBits::eTransient,
           "Graphics Dynamic Command Pool"))
+    , _transferOncePool(
+          context,
+          context->getPhysicalDevice().transferIndex,
+          vk::CommandPoolCreateFlagBits::eTransient,
+          "Transfer One-Shot Command Pool")
     , _transferStaticPool(
           context,
           context->getPhysicalDevice().transferIndex,
@@ -86,6 +96,19 @@ std::vector<CommandPoolAllocator> CommandBufferManager::createPoolAllocators(
     return std::move(pools);
 }
 
+vk::raii::CommandBuffer CommandBufferManager::allocateOneShotBuffer(
+    RenderQueue queue, vk::CommandBufferLevel level) const
+{
+    switch (queue)
+    {
+    case RenderQueue::Graphics:
+        return _graphicsOncePool.allocateCommandBuffer(level, "Graphics One-Shot Command Buffer");
+    case RenderQueue::Transfer:
+        return _transferOncePool.allocateCommandBuffer(level, "Transfer One-Shot Command Buffer");
+    }
+    throw std::runtime_error("Unknown render queue type");
+}
+
 vk::raii::CommandBuffer CommandBufferManager::allocatePrimaryBuffer(
     UsageProfile profile, uint32_t frameIndex) const
 {
@@ -108,7 +131,7 @@ vk::raii::CommandBuffer CommandBufferManager::allocateBuffer(
     case UsageProfile::GraphicsDynamic:
         return _graphicsDynamicPools[frameIndex].allocateCommandBuffer(
             level, std::format("Grpahics Dynamic Command Buffer {}", frameIndex));
-    case UsageProfile::TransferOnce:
+    case UsageProfile::TransferStatic:
         return _transferStaticPool.allocateCommandBuffer(level, "Transfer Static Command Buffer");
     case UsageProfile::TransferDynamic:
         return _transferDynamicPools[frameIndex].allocateCommandBuffer(
@@ -117,10 +140,40 @@ vk::raii::CommandBuffer CommandBufferManager::allocateBuffer(
     throw std::runtime_error("Unknown CommandBuffer::UsageProfile");
 }
 
+void CommandBufferManager::resetOneShotBuffers()
+{
+    _graphicsOncePool.reset();
+    _transferOncePool.reset();
+}
+
 void CommandBufferManager::resetDynamicBuffers(uint32_t frameIndex)
 {
     _graphicsDynamicPools[frameIndex].reset();
     _transferDynamicPools[frameIndex].reset();
+}
+
+uint32_t CommandBufferManager::getQueueFamilyIndex(RenderQueue queue) const
+{
+    switch (queue)
+    {
+    case RenderQueue::Graphics:
+        return _context->getPhysicalDevice().graphicsIndex;
+    case RenderQueue::Transfer:
+        return _context->getPhysicalDevice().transferIndex;
+    }
+    throw std::runtime_error("Unknown render queue family");
+}
+
+const vk::raii::Queue& CommandBufferManager::getQueue(RenderQueue queue) const
+{
+    switch (queue)
+    {
+    case RenderQueue::Graphics:
+        return _context->getDevice().graphicsQeeue;
+    case RenderQueue::Transfer:
+        return _context->getDevice().transferQeeue;
+    }
+    throw std::runtime_error("Unknown render queue family");
 }
 
 } // namespace VoxelDynamics::Vulkan

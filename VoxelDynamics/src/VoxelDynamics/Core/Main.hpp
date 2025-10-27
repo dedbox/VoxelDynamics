@@ -16,6 +16,7 @@ inline SDL_AppResult SDL_AppInit(void** appstate, int /*argc*/, char** /*argv*/)
     {
         std::unique_ptr<Application> app = CreateApplication();
         app->onCreate();
+        app->onCreated();
 
         *appstate = app.release();
 
