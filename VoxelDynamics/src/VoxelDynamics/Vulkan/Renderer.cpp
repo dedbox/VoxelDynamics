@@ -314,7 +314,7 @@ uint32_t Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags p
 
     // find a suitable type
     for (const auto& [i, memType] : std::ranges::views::enumerate(memProps.memoryTypes))
-        if ((typeFilter * (1U << static_cast<uint32_t>(i))) &&
+        if ((typeFilter & (1U << static_cast<uint32_t>(i))) &&
             (memType.propertyFlags & properties) == properties)
             return i;
 
