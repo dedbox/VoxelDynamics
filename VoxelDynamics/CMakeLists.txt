@@ -10,6 +10,7 @@ add_library(
   src/VoxelDynamics/Core/Window.cpp
   src/VoxelDynamics/Vulkan/CommandBufferManager.cpp
   src/VoxelDynamics/Vulkan/Context.cpp
+  src/VoxelDynamics/Vulkan/PhysicalDevice.cpp
   src/VoxelDynamics/Vulkan/PipelineManager.cpp
   src/VoxelDynamics/Vulkan/Renderer.cpp
   vendor/spirv-reflect/spirv_reflect.c)

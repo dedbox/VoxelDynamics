@@ -372,7 +372,7 @@ void Renderer::createAndTransferBuffer(
         vk::AccessFlagBits2::eTransferWrite,   // source access mask
         vk::PipelineStageFlagBits2::eNone,     // destination stage mask
         vk::AccessFlagBits2::eNone,            // destination access mask
-        physicalDevice.transferIndex,          // source queue family index
+        physicalDevice.index->transfer,        // source queue family index
         destIndex,                             // destination queue family index
         deviceBuffer,                          // the resource being transferred
         0,                                     // offset
@@ -412,7 +412,7 @@ void Renderer::createAndTransferBuffer(
         vk::AccessFlagBits2::eNone,        // source access mask
         stage,                             // first stage where the data is used
         access,                            // first access type
-        physicalDevice.transferIndex,      // source queue family index
+        physicalDevice.index->transfer,    // source queue family index
         destIndex,                         // destination queue family index
         deviceBuffer,                      // the resource being transferred
         0,                                 // offset

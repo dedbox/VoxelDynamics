@@ -51,32 +51,32 @@ CommandBufferManager::CommandBufferManager(const Context* context, uint32_t maxF
     : _context(context)
     , _graphicsOncePool(
           context,
-          context->getPhysicalDevice().graphicsIndex,
+          context->getPhysicalDevice().index->graphics,
           vk::CommandPoolCreateFlagBits::eTransient,
           "Graphics One-Shot Command Pool")
     , _graphicsStaticPool(
           context,
-          context->getPhysicalDevice().graphicsIndex,
+          context->getPhysicalDevice().index->graphics,
           vk::CommandPoolCreateFlagBits::eTransient,
           "Graphics Static Command Pool")
     , _graphicsDynamicPools(createPoolAllocators(
           maxFramesInFlight,
-          context->getPhysicalDevice().graphicsIndex,
+          context->getPhysicalDevice().index->graphics,
           vk::CommandPoolCreateFlagBits::eTransient,
           "Graphics Dynamic Command Pool"))
     , _transferOncePool(
           context,
-          context->getPhysicalDevice().transferIndex,
+          context->getPhysicalDevice().index->transfer,
           vk::CommandPoolCreateFlagBits::eTransient,
           "Transfer One-Shot Command Pool")
     , _transferStaticPool(
           context,
-          context->getPhysicalDevice().transferIndex,
+          context->getPhysicalDevice().index->transfer,
           vk::CommandPoolCreateFlagBits::eTransient,
           "Transfer Static Command Pool")
     , _transferDynamicPools(createPoolAllocators(
           maxFramesInFlight,
-          context->getPhysicalDevice().transferIndex,
+          context->getPhysicalDevice().index->transfer,
           vk::CommandPoolCreateFlagBits::eTransient,
           "Transfer Dynamic Command Pool"))
 {
@@ -157,9 +157,9 @@ uint32_t CommandBufferManager::getQueueFamilyIndex(RenderQueue queue) const
     switch (queue)
     {
     case RenderQueue::Graphics:
-        return _context->getPhysicalDevice().graphicsIndex;
+        return _context->getPhysicalDevice().index->graphics;
     case RenderQueue::Transfer:
-        return _context->getPhysicalDevice().transferIndex;
+        return _context->getPhysicalDevice().index->transfer;
     }
     throw std::runtime_error("Unknown render queue family");
 }
