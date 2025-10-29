@@ -3,6 +3,7 @@
 #include "vulkan/vulkan_raii.hpp"
 
 #include "VoxelDynamics/Core/Window.hpp"
+#include "VoxelDynamics/Vulkan/Instance.hpp"
 #include "VoxelDynamics/Vulkan/PhysicalDevice.hpp"
 
 namespace VoxelDynamics::Vulkan
@@ -74,39 +75,13 @@ public:
 
 private:
     vk::raii::Context _context;
-    vk::raii::Instance _instance;
+    const Instance _instance;
     vk::raii::SurfaceKHR _surface;
     const PhysicalDevice _physicalDevice;
     const Device _device;
 
-    // Instance ////////////////////////////////////////////////////////////////////////////////////
-
-    vk::raii::Instance createInstance(const std::string& appName, const uint64_t appVersion) const;
-
-    static constexpr std::vector<const char*> InstanceLayers();
-    static std::vector<const char*> InstanceExtensions();
-
-    static void CheckInstanceLayers(const std::vector<const char*>& layers);
-    static void CheckInstanceExtensions(const std::vector<const char*>& extensions);
-
-    static VKAPI_ATTR vk::Bool32 VKAPI_CALL DebugUtilsMessengerCallback(
-        vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-        vk::DebugUtilsMessageTypeFlagsEXT messageTypes,
-        vk::DebugUtilsMessengerCallbackDataEXT const* pCallbackData,
-        void* pUserData);
-
-    static constexpr vk::DebugUtilsMessengerCreateInfoEXT DebugUtilsMessengerCreateInfoEXT();
-
-    // Surface /////////////////////////////////////////////////////////////////////////////////////
-
     vk::raii::SurfaceKHR createSurface(Window& window) const;
-
-    // Physical Device /////////////////////////////////////////////////////////////////////////////
-
     PhysicalDevice pickPhysicalDevice() const;
-
-    // Logical Device //////////////////////////////////////////////////////////////////////////////
-
     Device createDevice() const;
 };
 
