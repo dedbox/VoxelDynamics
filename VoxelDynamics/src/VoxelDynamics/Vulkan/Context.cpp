@@ -11,19 +11,19 @@ Context::Context(
     , _instance(Instance(_context, appName, appVersion))
     , _surface(createSurface(window))
     , _physicalDevice(pickPhysicalDevice())
-    , _device(createDevice())
+    , _device(Device(_physicalDevice))
 {
 }
 
 vk::raii::SurfaceKHR Context::createSurface(Window& window) const
 {
     VkSurfaceKHR surface = VK_NULL_HANDLE;
+
     if (!SDL_Vulkan_CreateSurface(*window, **_instance, nullptr, &surface))
         throw SDLException("Could not create Vulkan surface");
+
     return vk::raii::SurfaceKHR(*_instance, surface);
 }
-
-// Physical Device /////////////////////////////////////////////////////////////////////////////////
 
 PhysicalDevice Context::pickPhysicalDevice() const
 {
@@ -187,84 +187,6 @@ std::string Context::PresentModeNames(const std::vector<vk::PresentModeKHR>& pre
 
     return presentModes | std::ranges::views::transform(modeName) |
            std::ranges::views::join_with(std::string_view(", ")) | std::ranges::to<std::string>();
-}
-
-// Logical Device //////////////////////////////////////////////////////////////////////////////////
-
-Device Context::createDevice() const
-{
-    const float queuePriority   = 1.0;
-    const auto queueCreateInfos = [&]() -> std::vector<vk::DeviceQueueCreateInfo> {
-        std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
-        queueCreateInfos.reserve(3);
-
-        queueCreateInfos.push_back(
-            vk::DeviceQueueCreateInfo({}, _physicalDevice.index->graphics, 1, &queuePriority));
-
-        if (_physicalDevice.index->present != _physicalDevice.index->graphics)
-        {
-            const auto createInfo =
-                vk::DeviceQueueCreateInfo({}, _physicalDevice.index->present, 1, &queuePriority);
-            queueCreateInfos.push_back(createInfo);
-        }
-
-        if (_physicalDevice.index->transfer != _physicalDevice.index->graphics)
-        {
-            const auto createInfo =
-                vk::DeviceQueueCreateInfo({}, _physicalDevice.index->transfer, 1, &queuePriority);
-            queueCreateInfos.push_back(createInfo);
-        }
-
-        return queueCreateInfos;
-    }();
-
-    const auto extensions = PhysicalDevice::RequiredDeviceExtensions();
-    const auto features   = _physicalDevice.features->get<vk::PhysicalDeviceFeatures2>().features;
-    const auto features13 = _physicalDevice.features->get<vk::PhysicalDeviceVulkan13Features>();
-
-    const vk::DeviceCreateInfo createInfo(
-        {},
-        queueCreateInfos.size(),
-        queueCreateInfos.data(),
-        0,
-        nullptr,
-        extensions.size(),
-        extensions.data(),
-        &features,
-        features13);
-
-    auto device        = vk::raii::Device(_physicalDevice.physicalDevice, createInfo);
-    auto graphicsQueue = vk::raii::Queue(device, _physicalDevice.index->graphics, 0);
-    auto presentQueue  = vk::raii::Queue(device, _physicalDevice.index->present, 0);
-    auto transferQueue = vk::raii::Queue(device, _physicalDevice.index->transfer, 0);
-
-    device.setDebugUtilsObjectNameEXT(
-        vk::DebugUtilsObjectNameInfoEXT(
-            vk::ObjectType::eDevice, reinterpret_cast<uint64_t>(&**device), "Vulkan Device"));
-
-    device.setDebugUtilsObjectNameEXT(
-        vk::DebugUtilsObjectNameInfoEXT(
-            vk::ObjectType::eQueue,
-            reinterpret_cast<uint64_t>(&**graphicsQueue),
-            "Graphics Queue"));
-
-    device.setDebugUtilsObjectNameEXT(
-        vk::DebugUtilsObjectNameInfoEXT(
-            vk::ObjectType::eQueue, reinterpret_cast<uint64_t>(&**presentQueue), "Present Queue"));
-
-    device.setDebugUtilsObjectNameEXT(
-        vk::DebugUtilsObjectNameInfoEXT(
-            vk::ObjectType::eQueue,
-            reinterpret_cast<uint64_t>(&**transferQueue),
-            "Transfer Queue"));
-
-    Log::Core::Info("Logical device created");
-
-    return Device(
-        std::move(device),
-        std::move(graphicsQueue),
-        std::move(presentQueue),
-        std::move(transferQueue));
 }
 
 void Context::setDebugName(vk::ObjectType type, void* handle, const std::string& name) const

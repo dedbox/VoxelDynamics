@@ -3,34 +3,12 @@
 #include "vulkan/vulkan_raii.hpp"
 
 #include "VoxelDynamics/Core/Window.hpp"
+#include "VoxelDynamics/Vulkan/Device.hpp"
 #include "VoxelDynamics/Vulkan/Instance.hpp"
 #include "VoxelDynamics/Vulkan/PhysicalDevice.hpp"
 
 namespace VoxelDynamics::Vulkan
 {
-
-/** The central object for all Vulkan device-level operations.
- *
- * A logical Device represents a direct interface to the chosen PhysicalDevice. It is used to issue
- * all Vulkan commands for creating resources (e.g., pipelines, command pools, images), allocating
- * command buffers, retrieving handles to queues, managing memory, and sumitting work.
- */
-struct Device
-{
-public:
-    vk::raii::Device device;
-    vk::raii::Queue graphicsQeeue;
-    vk::raii::Queue presentQeeue;
-    vk::raii::Queue transferQeeue;
-
-    // proxy dereference operator
-    vk::raii::Device& operator*() { return device; }
-    const vk::raii::Device& operator*() const { return device; }
-
-    // proxy arrow operator
-    vk::raii::Device* operator->() { return &device; }
-    const vk::raii::Device* operator->() const { return &device; }
-};
 
 /** Performs all platform-specific and high-level Vulkan setup and manages Vulkan handles required
  * for interacting with the graphics hardware.
@@ -82,7 +60,6 @@ private:
 
     vk::raii::SurfaceKHR createSurface(Window& window) const;
     PhysicalDevice pickPhysicalDevice() const;
-    Device createDevice() const;
 };
 
 } // namespace VoxelDynamics::Vulkan
