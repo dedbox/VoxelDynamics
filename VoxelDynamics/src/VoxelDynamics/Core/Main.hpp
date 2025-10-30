@@ -74,5 +74,9 @@ inline SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
 
 inline void SDL_AppQuit(void* appstate, SDL_AppResult /*result*/)
 {
-    delete static_cast<VoxelDynamics::Application*>(appstate); // NOLINT
+    auto app = static_cast<Application*>(appstate);
+
+    app->onQuit();
+
+    delete app; // NOLINT
 }

@@ -43,15 +43,16 @@ public:
     Application& operator=(const Application&) = delete;
 
     // life cycle management
-    void quit() { _done = true; }
-    bool isDone() const { return _done; }
-
     virtual void onCreate() {}
     void onCreated() { _renderer.resetOneShotBuffers(); }
 
     virtual void onUpdate(double deltaTime) {}
 
     void handleSdlEvent(SDL_Event* event);
+
+    void quit() { _done = true; }
+    bool isDone() const { return _done; }
+    void onQuit() const { _context.getDevice()->waitIdle(); }
 
 protected:
     Window _window;
