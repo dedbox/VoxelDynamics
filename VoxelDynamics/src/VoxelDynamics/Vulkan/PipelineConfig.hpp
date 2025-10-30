@@ -13,9 +13,10 @@ struct PipelineConfig
     std::vector<std::string> names;
 
     // fixed-function state
-    vk::PipelineVertexInputStateCreateInfo vertexInpuState{};
+    vk::PipelineVertexInputStateCreateInfo vertexInputState{};
     vk::PipelineInputAssemblyStateCreateInfo inputAssemblyState{};
     // vk::PipelineTessellationStateCreateInfo tesselationState{};
+    vk::PipelineViewportStateCreateInfo viewportState{};
     vk::PipelineRasterizationStateCreateInfo rasterizationState{};
     vk::PipelineMultisampleStateCreateInfo multisampleState{};
     // vk::PipelineDepthStencilStateCreateInfo depthStencilState{};
@@ -105,6 +106,21 @@ struct std::hash<vk::PipelineInputAssemblyStateCreateInfo>
         hash_combine(seed, static_cast<uint32_t>(v.flags));
         hash_combine(seed, v.topology);
         hash_combine(seed, v.primitiveRestartEnable);
+        return seed;
+    }
+};
+
+template <>
+struct std::hash<vk::PipelineViewportStateCreateInfo>
+{
+    size_t operator()(const vk::PipelineViewportStateCreateInfo& v) const noexcept
+    {
+        size_t seed = 0;
+        hash_combine(seed, static_cast<uint32_t>(v.flags));
+        hash_combine(seed, v.viewportCount);
+        hash_combine(seed, v.pViewports);
+        hash_combine(seed, v.scissorCount);
+        hash_combine(seed, v.pScissors);
         return seed;
     }
 };
@@ -254,9 +270,10 @@ struct std::hash<VoxelDynamics::Vulkan::PipelineConfig>
             hash_combine(h, name);
 
         // fixed-function state
-        hash_combine(h, k.vertexInpuState);
+        hash_combine(h, k.vertexInputState);
         hash_combine(h, k.inputAssemblyState);
         // hash_combind(h, k.tesselationState);
+        hash_combine(h, k.viewportState);
         hash_combine(h, k.rasterizationState);
         hash_combine(h, k.multisampleState);
         // hash_combine(h, k.depthStencilState);

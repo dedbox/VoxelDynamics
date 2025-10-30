@@ -55,6 +55,7 @@ Application::BuildInfo&& Application::initialize(BuildInfo&& buildInfo)
 Application::~Application()
 {
     Log::Core::Info("Terminating {}", buildInfo.name);
+    _renderer.wait();
 }
 
 void Application::handleSdlEvent(SDL_Event* event)

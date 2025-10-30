@@ -171,15 +171,15 @@ public:
     explicit Sandbox(BuildInfo buildInfo)
         : Application(std::move(buildInfo))
         , _graphicsPipeline(createGraphicsPipeline())
+        , _vertexBuffer(
+              _renderer.transferVertexData(_vertices.data(), _vertices.size() * sizeof(Vertex)))
+        , _indexBuffer(
+              _renderer.transferIndexData(_indices.data(), _indices.size() * sizeof(uint16_t)))
     {
     }
 
     void onCreate() override
     {
-        // upload mesh data
-        _renderer.transferVertexData(_vertices.data(), _vertices.size() * sizeof(Vertex));
-        _renderer.transferIndexData(_indices.data(), _indices.size() * sizeof(uint16_t));
-
         // connect event listeners
         Event::Bus::Connect<Event::WindowClose, &Sandbox::onClose>(this);
         Event::Bus::Connect<Event::KeyDown, &Sandbox::onKeyDown>(this);
@@ -210,8 +210,54 @@ public:
         Log::Trace("unhandled KeyDown event: {}{}", keyName, event.repeat ? " (repeat)" : "");
     }
 
+    void onUpdate(double /*deltaTime*/) override
+    {
+        _renderer.drawFrame(
+            _window, _graphicsPipeline, [&](const vk::raii::CommandBuffer& cmdBuffer) {
+                // bind vertex data
+                cmdBuffer.bindVertexBuffers(
+                    0,                     // first binding
+                    *_vertexBuffer.buffer, // buffer
+                    {0});                  // offsets
+
+                // // bind uniform data
+                // if (uniformBuffer)
+                //     frame.gpBuffer.bindDescriptorSets(
+                //         vk::PipelineBindPoint::eGraphics, // pipeline bind point
+                //         *pipeline.pipelineLayout,         // pipeline layout
+                //         0,                                // first set
+                //         *frame.descriptorSet,             // descriptor sets
+                //         nullptr);                         // dynamic offsets
+
+                // bind index data
+                cmdBuffer.bindIndexBuffer(
+                    *_indexBuffer.buffer,    // buffer
+                    0,                       // offset
+                    vk::IndexType::eUint16); // index type
+
+                // issue indexed draw command
+                cmdBuffer.drawIndexed(
+                    _indices.size(), // index count
+                    1,               // instance count
+                    0,               // first index
+                    0,               // vertex offset
+                    0);              // first instance
+
+                // }
+                // else
+                // // issue non-indexed draw command
+                // cmdBuffer.draw(
+                //     _vertices.size(), // vertex count
+                //     1,                // instance count
+                //     0,                // first vertex
+                //     0);               // first instance
+            });
+    }
+
 private:
     const vk::raii::Pipeline& _graphicsPipeline;
+    Vulkan::Buffer _vertexBuffer;
+    Vulkan::Buffer _indexBuffer;
 
     const vk::raii::Pipeline& createGraphicsPipeline()
     {
@@ -223,7 +269,7 @@ private:
         const auto& vertexBindingDescription         = Vertex::getBindingDescription();
         const auto& vertexInputAttributeDescriptions = Vertex::getAttributeDescriptions();
 
-        config.vertexInpuState = vk::PipelineVertexInputStateCreateInfo(
+        config.vertexInputState = vk::PipelineVertexInputStateCreateInfo(
             {},                                // flags
             vertexBindingDescription,          // vertex binding descriptions
             vertexInputAttributeDescriptions); // vertex input attribute descriptions
@@ -233,6 +279,13 @@ private:
             vk::PrimitiveTopology::eTriangleList, // topology
             vk::False);                           // primitive restart enabled
 
+        config.viewportState = vk::PipelineViewportStateCreateInfo(
+            {},       // flags
+            1,        // viewport count (must be 1 without muliViewport feature is enabled)
+            nullptr,  // pViewports (ignored)
+            1,        // scissor count (must match viewport count)
+            nullptr); // pScissors (ignored)
+
         config.rasterizationState = vk::PipelineRasterizationStateCreateInfo(
             {},                          // flags
             vk::False,                   // depth clamp enabled
@@ -241,9 +294,9 @@ private:
             vk::CullModeFlagBits::eBack, // cull mode
             vk::FrontFace::eClockwise,   // front face
             vk::False,                   // depth bias enabled
-            {},                          // depth bias constant factor
-            {},                          // depth bias clamp
-            1.0F,                        // depth bias slope factor
+            0.0F,                        // depth bias constant factor
+            0.0F,                        // depth bias clamp
+            0.0F,                        // depth bias slope factor
             1.0F);                       // line width
 
         config.multisampleState = vk::PipelineMultisampleStateCreateInfo(
@@ -300,7 +353,10 @@ std::unique_ptr<Application> VoxelDynamics::CreateApplication()
                 .resizable = true,
                 .hidden    = true,
             },
-    };
+        .renderer = {
+            .maxFramesInFlight = 2,
+            .clearColor        = {0.0F, 0.0F, 0.0F, 1.0F},
+        }};
 
     return std::make_unique<Sandbox>(buildInfo);
 }

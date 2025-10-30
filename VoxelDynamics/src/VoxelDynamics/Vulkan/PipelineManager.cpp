@@ -137,7 +137,7 @@ const vk::raii::Pipeline& PipelineManager::getGraphicsPipeline(const PipelineCon
     vk::PipelineLayout layout = getPipelineLayout(config);
 
     // dynamic states
-    std::vector<vk::DynamicState> dynamicStates = {
+    const std::vector<vk::DynamicState> dynamicStates = {
         vk::DynamicState::eViewport, vk::DynamicState::eScissor};
     vk::PipelineDynamicStateCreateInfo dynamicStateInfo({}, dynamicStates);
 
@@ -150,22 +150,22 @@ const vk::raii::Pipeline& PipelineManager::getGraphicsPipeline(const PipelineCon
 
     // create graphics pipeline
     vk::GraphicsPipelineCreateInfo createInfo(
-        {},
-        stageInfos,
-        &config.vertexInpuState,
-        &config.inputAssemblyState,
-        nullptr, // tesselation state
-        nullptr, // viewport state
-        &config.rasterizationState,
-        &config.multisampleState,
-        nullptr, // depth/stencil state
-        &colorBlendState,
-        &dynamicStateInfo,
-        layout,
-        {},                           // rendering pass
-        {},                           // subpass
-        {},                           // base pipeline handle
-        {},                           // base pipeline index
+        {},                           // flags
+        stageInfos,                   // stages
+        &config.vertexInputState,     // vertex input state
+        &config.inputAssemblyState,   // input assembly state
+        nullptr,                      // tesselation state
+        &config.viewportState,        // viewport state
+        &config.rasterizationState,   // rastrization state
+        &config.multisampleState,     // multisample state
+        nullptr,                      // depth/stencil state
+        &colorBlendState,             // color blend state
+        &dynamicStateInfo,            // dynamic states
+        layout,                       // pipeline layout
+        VK_NULL_HANDLE,               // rendering pass
+        0,                            // subpass
+        nullptr,                      // base pipeline handle
+        -1,                           // base pipeline index
         &config.renderingCreateInfo); // pNext
 
     auto pipeline = _context->getDevice()->createGraphicsPipeline(_pipelineCache, createInfo);

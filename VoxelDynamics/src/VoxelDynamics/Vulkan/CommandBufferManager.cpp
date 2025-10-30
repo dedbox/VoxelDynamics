@@ -91,7 +91,11 @@ std::vector<CommandPoolAllocator> CommandBufferManager::createPoolAllocators(
     std::vector<CommandPoolAllocator> pools;
     pools.reserve(count);
     for (const auto i : std::ranges::views::iota(0U, count))
-        pools.emplace_back(_context, queueFamilyIndex, flags, std::format("{} {}", debugName, i));
+        pools.emplace_back(
+            _context,
+            queueFamilyIndex,
+            flags | vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+            std::format("{} {}", debugName, i));
 
     return std::move(pools);
 }
@@ -130,7 +134,7 @@ vk::raii::CommandBuffer CommandBufferManager::allocateBuffer(
         return _graphicsStaticPool.allocateCommandBuffer(level, "Graphics Static Command Buffer");
     case UsageProfile::GraphicsDynamic:
         return _graphicsDynamicPools[frameIndex].allocateCommandBuffer(
-            level, std::format("Grpahics Dynamic Command Buffer {}", frameIndex));
+            level, std::format("Graphics Dynamic Command Buffer {}", frameIndex));
     case UsageProfile::TransferStatic:
         return _transferStaticPool.allocateCommandBuffer(level, "Transfer Static Command Buffer");
     case UsageProfile::TransferDynamic:

@@ -46,9 +46,9 @@ public:
     void quit() { _done = true; }
     bool isDone() const { return _done; }
 
+    virtual void onCreate() {}
     void onCreated() { _renderer.resetOneShotBuffers(); }
 
-    virtual void onCreate() {}
     virtual void onUpdate(double deltaTime) {}
 
     void handleSdlEvent(SDL_Event* event);

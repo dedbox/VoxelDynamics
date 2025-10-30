@@ -6,9 +6,9 @@ namespace VoxelDynamics::Vulkan
 Renderer::Renderer(BuildInfo buildInfo_, const Context* context, const Window& window)
     : buildInfo(buildInfo_)
     , _context(context)
-    , _swapChain(createSwapChain(window))
     , _cmdBufferManager(_context, buildInfo.maxFramesInFlight)
     , _pipelineManager(_context, vk::raii::PipelineCache(*_context->getDevice(), {}))
+    , _swapChain(createSwapChain(window))
 {
     if (!_context)
         throw std::invalid_argument("Context pointer cannot be null");
@@ -26,9 +26,9 @@ void Renderer::wait() const
     _context->getDevice()->waitIdle();
 }
 
-void Renderer::transferVertexData(const void* data, size_t size) const
+Buffer Renderer::transferVertexData(const void* data, size_t size) const
 {
-    createAndTransferBuffer(
+    return createAndTransferBuffer(
         vk::BufferUsageFlagBits::eVertexBuffer,
         RenderQueue::Graphics,
         vk::PipelineStageFlagBits2::eVertexAttributeInput,
@@ -39,9 +39,9 @@ void Renderer::transferVertexData(const void* data, size_t size) const
         "Vertex Buffer Memory");
 }
 
-void Renderer::transferIndexData(const void* data, size_t size) const
+Buffer Renderer::transferIndexData(const void* data, size_t size) const
 {
-    createAndTransferBuffer(
+    return createAndTransferBuffer(
         vk::BufferUsageFlagBits::eIndexBuffer,
         RenderQueue::Graphics,
         vk::PipelineStageFlagBits2::eIndexInput,
@@ -50,6 +50,205 @@ void Renderer::transferIndexData(const void* data, size_t size) const
         size,
         "Index Buffer",
         "Index Buffer Memory");
+}
+
+void Renderer::drawFrame(
+    const Window& window, const vk::raii::Pipeline& pipeline, const CommandRecorder& recorder)
+{
+    const Device& device       = _context->getDevice();
+    const FrameData& frameData = getCurrentFrameData();
+
+    // waith for the current frame to become available
+    while (device->waitForFences(
+               *frameData.inFlightFence, vk::True, std::numeric_limits<uint64_t>::max()) ==
+           vk::Result::eTimeout)
+        ;
+
+    // acquire the next swap chain image
+    vk::Result result{};
+    uint32_t imageIndex{};
+
+    try
+    {
+        std::tie(result, imageIndex) = _swapChain->acquireNextImage(
+            std::numeric_limits<uint64_t>::max(), frameData.imageAvailableSemaphore, nullptr);
+    }
+    catch (const vk::OutOfDateKHRError& e)
+    {
+        recreateSwapChain(window);
+        return;
+    }
+
+    if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
+        throw std::runtime_error("Could not acquire the next swap chain image");
+
+    Log::Core::Trace("Acquired swap chain image {}", imageIndex);
+
+    const SwapChainImageData& imageData = _swapChain.images[imageIndex];
+
+    // reset the fence (now that we know we will be submitting work with it)
+    device->resetFences(*frameData.inFlightFence);
+
+    // reset the current command pools (and implicitly invalidate their command buffers)
+    _cmdBufferManager.resetDynamicBuffers(_swapChain.currentFrame);
+
+    recordCommandBuffer(imageIndex, pipeline, recorder, frameData.cmdBuffer);
+
+    // submit the command buffer to the graphics queue
+    vk::PipelineStageFlags waitStages(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+
+    const vk::SubmitInfo submitInfo(
+        *frameData.imageAvailableSemaphore,
+        waitStages,
+        *frameData.cmdBuffer,
+        *imageData.renderFinishedSemaphore);
+    device.graphicsQeeue.submit(submitInfo, *frameData.inFlightFence);
+
+    // present the current swap chain image after the graphics queue finishes
+    try
+    {
+        const vk::PresentInfoKHR presentInfo(
+            *imageData.renderFinishedSemaphore, **_swapChain, imageIndex);
+        result = device.graphicsQeeue.presentKHR(presentInfo);
+    }
+    catch (const vk::OutOfDateKHRError& e)
+    {
+        recreateSwapChain(window);
+    }
+
+    if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR ||
+        _swapChain.resized)
+        recreateSwapChain(window);
+    else if (result != vk::Result::eSuccess)
+        throw std::runtime_error("Could not present swap chain image");
+
+    // move to the next frame
+    _swapChain.currentFrame = (_swapChain.currentFrame + 1) & buildInfo.maxFramesInFlight;
+}
+
+void Renderer::recordCommandBuffer(
+    uint32_t imageIndex,
+    const vk::raii::Pipeline& pipeline,
+    const CommandRecorder& recorder,
+    const vk::raii::CommandBuffer& cmdBuffer)
+{
+    SwapChainImageData& imageData = _swapChain.images[imageIndex];
+    const FrameData& frameData    = getCurrentFrameData();
+
+    cmdBuffer.begin({});
+
+    // transition swap chain image to color attachment layout
+    transitionImageLayout(
+        cmdBuffer,
+        imageData.image,
+        vk::ImageLayout::eUndefined,                         // old layout
+        vk::ImageLayout::eColorAttachmentOptimal,            // new layout
+        {},                                                  // source aspect mask (no need to wait)
+        vk::AccessFlagBits2::eColorAttachmentWrite,          // destination aspect mask
+        vk::PipelineStageFlagBits2::eTopOfPipe,              // source stage mask
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput); // destination stage mask
+
+    // configure the color attachment
+    vk::ClearColorValue clearColor = vk::ClearColorValue(
+        buildInfo.clearColor[0],
+        buildInfo.clearColor[1],
+        buildInfo.clearColor[2],
+        buildInfo.clearColor[3]);
+    vk::RenderingAttachmentInfo attachmentInfo(
+        imageData.imageView,                      // image view
+        vk::ImageLayout::eColorAttachmentOptimal, // image layout
+        vk::ResolveModeFlagBits::eNone,           // resolve mode
+        {},                                       // resolve image view
+        vk::ImageLayout::eUndefined,              // resolve image layout
+        vk::AttachmentLoadOp::eClear,             // load operation
+        vk::AttachmentStoreOp::eStore,            // store operation
+        clearColor);                              // clear value
+
+    // configure dynamic rendering
+    vk::RenderingInfo renderingInfo(
+        {},
+        vk::Rect2D({0, 0}, _swapChain.extent), // render area
+        1,                                     // layer count
+        {},                                    // view mask
+        1,                                     // color attachment count
+        &attachmentInfo);                      // color attachments
+
+    // begin rendering
+    cmdBuffer.beginRendering(renderingInfo);
+
+    // bind the graphics pipeline
+    cmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline);
+
+    // supply dynamic rendering data
+    cmdBuffer.setViewport(
+        0,
+        vk::Viewport(
+            0.0F,
+            0.0F,
+            static_cast<float>(_swapChain.extent.width),
+            static_cast<float>(_swapChain.extent.height),
+            0.0F,
+            1.0F));
+    cmdBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), _swapChain.extent));
+
+    recorder(cmdBuffer);
+
+    // end rendering
+    cmdBuffer.endRendering();
+
+    // transition swap chain image to present layout
+    transitionImageLayout(
+        cmdBuffer,
+        imageData.image,
+        vk::ImageLayout::eColorAttachmentOptimal,           // old layout
+        vk::ImageLayout::ePresentSrcKHR,                    // new layout
+        vk::AccessFlagBits2::eColorAttachmentWrite,         // source access mask
+        {},                                                 // destination access mask
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput, // source stage
+        vk::PipelineStageFlagBits2::eBottomOfPipe);         // destination stage
+
+    cmdBuffer.end();
+}
+
+void Renderer::transitionImageLayout(
+    const vk::raii::CommandBuffer& buffer,
+    vk::Image& image,
+    vk::ImageLayout oldLayout,
+    vk::ImageLayout newLayout,
+    vk::AccessFlags2 srcAccessMask,
+    vk::AccessFlags2 dstAccessMask,
+    vk::PipelineStageFlags2 srcStageMask,
+    vk::PipelineStageFlags2 dstStageMask)
+{
+    vk::ImageSubresourceRange subresourceRange(
+        vk::ImageAspectFlagBits::eColor, // aspect mask
+        0,                               // base mip level
+        1,                               // level count
+        0,                               // base array layer
+        1);                              // layer count
+
+    vk::ImageMemoryBarrier2 barrier(
+        srcStageMask,
+        srcAccessMask,
+        dstStageMask,
+        dstAccessMask,
+        oldLayout,
+        newLayout,
+        vk::QueueFamilyIgnored, // source queue family index
+        vk::QueueFamilyIgnored, // destination queue family index
+        image,
+        subresourceRange);
+
+    vk::DependencyInfo dependencyInfo(
+        {},
+        {},        // memory barrier count
+        {},        // memory barriers
+        {},        // buffer memory barrier count
+        {},        // buffer memory barriers
+        1,         // image memory barrier count
+        &barrier); // image memory barriers
+
+    buffer.pipelineBarrier2(dependencyInfo);
 }
 
 // Swap Chain //////////////////////////////////////////////////////////////////////////////////////
@@ -228,12 +427,16 @@ SwapChain Renderer::createSwapChain(const Window& window) const
 
     for (const auto i : std::ranges::views::iota(0U, buildInfo.maxFramesInFlight))
     {
+        // create command buffer
+        vk::raii::CommandBuffer cmdBuffer = _cmdBufferManager.allocatePrimaryBuffer(
+            CommandBufferManager::UsageProfile::GraphicsDynamic, i);
+
         // create "image available" semaphore
-        vk::raii::Semaphore semaphore(*device, semaphoreCreateInfo);
+        vk::raii::Semaphore imageAvailableSemaphore(*device, semaphoreCreateInfo);
 
         _context->setDebugName(
             vk::ObjectType::eSemaphore,
-            &**semaphore,
+            &**imageAvailableSemaphore,
             std::format("Frame Image Available Semaphore {}", i));
 
         // create frame-in-flight fence
@@ -243,7 +446,16 @@ SwapChain Renderer::createSwapChain(const Window& window) const
         _context->setDebugName(
             vk::ObjectType::eFence, &**fence, std::format("Frame In-Flight Fence {}", i));
 
-        frameDatas.emplace_back(std::move(semaphore), std::move(fence));
+        // create "transfer finished" semaphore
+        vk::raii::Semaphore transferFinishedSemaphore(*device, semaphoreCreateInfo);
+
+        _context->setDebugName(
+            vk::ObjectType::eSemaphore,
+            &**transferFinishedSemaphore,
+            std::format("Frame Transfer Finished Semaphore {}", i));
+
+        frameDatas.emplace_back(
+            std::move(cmdBuffer), std::move(imageAvailableSemaphore), std::move(fence));
     }
 
     Log::Core::Info("Swap chain created:");
@@ -276,7 +488,7 @@ const FrameData& Renderer::getCurrentFrameData() const
 
 // Command Buffers /////////////////////////////////////////////////////////////////////////////////
 
-std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> Renderer::createBuffer(
+Buffer Renderer::createBuffer(
     vk::DeviceSize size,
     vk::BufferUsageFlags usage,
     vk::MemoryPropertyFlags properties,
@@ -303,7 +515,7 @@ std::pair<vk::raii::Buffer, vk::raii::DeviceMemory> Renderer::createBuffer(
     // associate the memory with the handle
     buffer.bindMemory(*memory, 0);
 
-    return std::make_pair(std::move(buffer), std::move(memory));
+    return Buffer(std::move(buffer), std::move(memory));
 }
 
 uint32_t Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const
@@ -321,7 +533,7 @@ uint32_t Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags p
     throw std::runtime_error("Could not find a suitable memory type");
 }
 
-void Renderer::createAndTransferBuffer(
+Buffer Renderer::createAndTransferBuffer(
     vk::BufferUsageFlagBits usage,
     RenderQueue destQueue,
     const vk::PipelineStageFlagBits2 stage,
@@ -443,6 +655,8 @@ void Renderer::createAndTransferBuffer(
     device->resetFences(*fence);
 
     Log::Core::Info("Uploaded {} bytes ({}) to {} queue", size, bufferName, toString(destQueue));
+
+    return Buffer(std::move(deviceBuffer), std::move(deviceMemory));
 }
 
 } // namespace VoxelDynamics::Vulkan
