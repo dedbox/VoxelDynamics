@@ -37,7 +37,7 @@ std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> 
         spvReflectEnumerateDescriptorSets(&module, &setCount, sets.data());
 
         Log::Core::Info(
-            "Stage {} ({}) has {} descriptor sets", vk::to_string(stage), name, setCount);
+            "Shader stage {} ({}) has {} descriptor sets", vk::to_string(stage), name, setCount);
 
         // discover bindings
         for (const auto& [i, set] : std::ranges::views::enumerate(sets))
@@ -123,15 +123,13 @@ const vk::raii::Pipeline& PipelineManager::getGraphicsPipeline(const PipelineCon
         return _pipelineCacheMap.at(config);
 
     // load shader modules
-    std::vector<vk::raii::ShaderModule> modules;
     vk::ShaderModuleCreateInfo moduleCreateInfo(
         {}, config.spvCode.size(), reinterpret_cast<const uint32_t*>(config.spvCode.data()));
-    modules.emplace_back(*_context->getDevice(), moduleCreateInfo);
+    vk::raii::ShaderModule module(*_context->getDevice(), moduleCreateInfo);
 
     // get pipeline layout
     std::vector<vk::PipelineShaderStageCreateInfo> stageInfos;
-    for (const auto& [module, stage, name] :
-         std::ranges::views::zip(modules, config.stages, config.names))
+    for (const auto& [stage, name] : std::ranges::views::zip(config.stages, config.names))
         stageInfos.emplace_back(vk::PipelineShaderStageCreateFlags{}, stage, *module, name.c_str());
 
     vk::PipelineLayout layout = getPipelineLayout(config);

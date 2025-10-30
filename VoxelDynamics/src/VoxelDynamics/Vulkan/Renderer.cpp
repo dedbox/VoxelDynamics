@@ -79,6 +79,12 @@ void Renderer::drawFrame(
         return;
     }
 
+    if (result == vk::Result::eErrorOutOfDateKHR)
+    {
+        recreateSwapChain(window);
+        return;
+    }
+
     if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
         throw std::runtime_error("Could not acquire the next swap chain image");
 
@@ -123,7 +129,7 @@ void Renderer::drawFrame(
         throw std::runtime_error("Could not present swap chain image");
 
     // move to the next frame
-    _swapChain.currentFrame = (_swapChain.currentFrame + 1) & buildInfo.maxFramesInFlight;
+    _swapChain.currentFrame = (_swapChain.currentFrame + 1) % buildInfo.maxFramesInFlight;
 }
 
 void Renderer::recordCommandBuffer(
@@ -170,8 +176,9 @@ void Renderer::recordCommandBuffer(
         vk::Rect2D({0, 0}, _swapChain.extent), // render area
         1,                                     // layer count
         {},                                    // view mask
-        1,                                     // color attachment count
-        &attachmentInfo);                      // color attachments
+        attachmentInfo,                        // color attachments
+        nullptr,                               // depth attachments
+        nullptr);                              // stencil attachments
 
     // begin rendering
     cmdBuffer.beginRendering(renderingInfo);
@@ -462,6 +469,7 @@ SwapChain Renderer::createSwapChain(const Window& window) const
     Log::Core::Info("  number of swap chain images: {}", imageCount);
     Log::Core::Info("  chosen format: {}", Context::SurfaceFormatName(surfaceFormat));
     Log::Core::Info("  present mode: {}", vk::to_string(presentMode));
+    Log::Core::Info("  extent: {}x{}", extent.width, extent.height);
 
     return SwapChain(
         std::move(swapChain),
@@ -577,7 +585,7 @@ Buffer Renderer::createAndTransferBuffer(
     // copy host buffer to device-local buffer
     hostCmdBuffer.copyBuffer(*hostBuffer, *deviceBuffer, vk::BufferCopy(0, 0, size));
 
-    // host releases ownership of copied data
+    // release ownership of copied data (host)
     const auto destIndex = _cmdBufferManager.getQueueFamilyIndex(destQueue);
     vk::BufferMemoryBarrier2 releaseBarrier(
         vk::PipelineStageFlagBits2::eTransfer, // source stage mask
@@ -607,8 +615,8 @@ Buffer Renderer::createAndTransferBuffer(
 
     // submit the command buffer
     vk::CommandBufferSubmitInfo hostCmdBufferSubmitInfo(hostCmdBuffer);
-    vk::SubmitInfo2 hostHubmitInfo({}, {}, hostCmdBufferSubmitInfo, signalSemaphoreInfo);
-    _cmdBufferManager.getQueue(RenderQueue::Transfer).submit2(hostHubmitInfo);
+    vk::SubmitInfo2 hostSubmitInfo({}, {}, hostCmdBufferSubmitInfo, signalSemaphoreInfo);
+    _cmdBufferManager.getQueue(RenderQueue::Transfer).submit2(hostSubmitInfo, nullptr);
 
     // create a destination command buffer
     auto&& deviceCmdBuffer =
@@ -618,7 +626,7 @@ Buffer Renderer::createAndTransferBuffer(
     deviceCmdBuffer.begin(
         vk::CommandBufferBeginInfo(vk::CommandBufferUsageFlagBits::eOneTimeSubmit));
 
-    // device acquires ownership of copied data
+    // acquire ownership of copied data (device)
     vk::BufferMemoryBarrier2 acquireBarrier(
         vk::PipelineStageFlagBits2::eNone, // source stage mask
         vk::AccessFlagBits2::eNone,        // source access mask

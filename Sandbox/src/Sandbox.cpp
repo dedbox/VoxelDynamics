@@ -16,76 +16,12 @@
 //     glm::mat4 projection;
 // };
 
-// class SandboxApp : public Application
-// {
-// public:
-//     explicit SandboxApp(const Application::BuildInfo& buildInfo)
-//         : Application(buildInfo)
-//         , _pipeline(_context.createGraphicsPipeline(
-//               "shaders/shader.slang.spv",
-//               Vertex::getBindingDescription(),
-//               Vertex::getAttributeDescriptions(),
-//               _context.createDescriptorSetLayout(
-//                   vk::DescriptorSetLayoutBinding(
-//                       0,                                  // binding
-//                       vk::DescriptorType::eUniformBuffer, // descriptor type
-//                       1,                                  // descriptor count
-//                       vk::ShaderStageFlagBits::eVertex,   // shader stages
-//                       nullptr)                            // immutable samplers
-//                   )))
-//         , _frames(_context.createFrames(_pipeline))
-//         , _vertexBuffer(_context.createVertexBuffer(_frames, _vertices))
-//         , _indexBuffer(_context.createIndexBuffer(_frames, _indices))
-//         , _uniformBuffer(_context.createUniformBuffer<UniformBufferObject>(_frames))
-//     {
-//         // connect event listeners
-//         Event::Bus::Connect<Event::WindowClose, &SandboxApp::onClose>(this);
-//         Event::Bus::Connect<Event::WindowResuze, &SandboxApp::onResize>(this);
-//         Event::Bus::Connect<Event::KeyDown, &SandboxApp::onKeyDown>(this);
-
-//         // ready to run
-//         showWindow();
-//     }
-
-//     ~SandboxApp() override { _context.wait(); }
-
-//     // prevent copying
-//     SandboxApp(const SandboxApp&)            = delete;
-//     SandboxApp& operator=(const SandboxApp&) = delete;
-
-//     // prevent moving
-//     SandboxApp(SandboxApp&&)            = delete;
-//     SandboxApp& operator=(SandboxApp&&) = delete;
-
-//     void onClose() { quit(); }
-
 //     void onResize(const Event::WindowResuze& event)
 //     {
 //         Log::Info("Window resize event: {}x{}", event.width, event.height);
 //         const auto& [width, height] = getWWindowSize();
 //         if (width != event.width || height != event.height)
 //             _context.requestResize();
-//     }
-
-//     void onKeyDown(const VoxelDynamics::Event::KeyDown& event)
-//     {
-//         switch (event.key)
-//         {
-//         case SDLK_ESCAPE:
-//             quit();
-//             return;
-
-//         default:
-//             break;
-//         }
-
-//         const auto keyName = [&]() -> std::string {
-//             const std::string name = SDL_GetKeyName(event.key);
-//             return !name.empty() ? name : std::format("<key {}>", event.key);
-//         }();
-
-//         VoxelDynamics::Log::Trace(
-//             "unhandled KeyDown event: {}{}", keyName, event.repeat ? " (repeat)" : "");
 //     }
 
 //     void onUpdate(double /*deltaTime*/) override
@@ -118,14 +54,6 @@
 //         _context.drawCurrentFrame(
 //             _window, _frames, _pipeline, _vertexBuffer, _indexBuffer, _uniformBuffer);
 //     }
-
-// private:
-//     Vulkan::Context::Pipeline _pipeline;
-//     Vulkan::Context::Frames _frames;
-//     Vulkan::Context::VertexBuffer _vertexBuffer;
-//     Vulkan::Context::IndexBuffer _indexBuffer;
-//     std::vector<Vulkan::Context::UniformBuffer> _uniformBuffer;
-// };
 
 using namespace VoxelDynamics;
 
@@ -182,6 +110,7 @@ public:
     {
         // connect event listeners
         Event::Bus::Connect<Event::WindowClose, &Sandbox::onClose>(this);
+        // Event::Bus::Connect<Event::WindowResuze, &SandboxApp::onResize>(this);
         Event::Bus::Connect<Event::KeyDown, &Sandbox::onKeyDown>(this);
 
         // unhide the window
@@ -243,8 +172,6 @@ public:
                     0,               // vertex offset
                     0);              // first instance
 
-                // }
-                // else
                 // // issue non-indexed draw command
                 // cmdBuffer.draw(
                 //     _vertices.size(), // vertex count
@@ -296,7 +223,7 @@ private:
             vk::False,                   // depth bias enabled
             0.0F,                        // depth bias constant factor
             0.0F,                        // depth bias clamp
-            0.0F,                        // depth bias slope factor
+            1.0F,                        // depth bias slope factor
             1.0F);                       // line width
 
         config.multisampleState = vk::PipelineMultisampleStateCreateInfo(
@@ -327,7 +254,7 @@ private:
             colorBlendAttachment); // color blend attachments
 
         config.renderingCreateInfo = vk::PipelineRenderingCreateInfo(
-            {},                                            // view mask
+            0,                                             // view mask
             _renderer.getSwapChain().surfaceFormat.format, // color attachment formats
             vk::Format::eUndefined,                        // depth attachment format
             vk::Format::eUndefined);                       // stencil attachment format
@@ -343,7 +270,7 @@ std::unique_ptr<Application> VoxelDynamics::CreateApplication()
     const Application::BuildInfo buildInfo{
         .name     = "SandboxApp",
         .version  = Version(0, 1, 0),
-        .logLevel = Log::Level::Info,
+        .logLevel = Log::Level::Debug,
         .window =
             {
                 .title     = "Sandbox",
