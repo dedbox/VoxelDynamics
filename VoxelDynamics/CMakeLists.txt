@@ -31,7 +31,7 @@ set_source_files_properties(vendor/spirv-reflect/spirv_reflect.c
                             PROPERTIES SKIP_PRECOMPILE_HEADERS TRUE)
 
 target_compile_definitions(VoxelDynamics
-                           PRIVATE SPIRV_REFLECT_USE_SYSTEM_SPIRV_H)
+                           PUBLIC SPIRV_REFLECT_USE_SYSTEM_SPIRV_H)
 
 # Compile-time Options #########################################################
 

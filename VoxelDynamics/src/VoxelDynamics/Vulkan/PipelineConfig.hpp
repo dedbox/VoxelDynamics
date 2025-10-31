@@ -5,12 +5,23 @@
 namespace VoxelDynamics::Vulkan
 {
 
+/** Helper structure to hold shader module configuration. */
+struct ShaderModuleConfig
+{
+    std::vector<char> spirvBytecode;
+    vk::ShaderStageFlagBits stage;
+    std::string entryPointName;
+
+    auto operator<=>(const VoxelDynamics::Vulkan::ShaderModuleConfig&) const = default;
+};
+
 struct PipelineConfig
 {
+    // pipeline info
+    std::string debugName = "Shader Pipeline";
+
     // shader stages
-    std::vector<char> spvCode;
-    std::vector<vk::ShaderStageFlagBits> stages;
-    std::vector<std::string> names;
+    std::vector<ShaderModuleConfig> shaderModuleConfigs;
 
     // fixed-function state
     vk::PipelineVertexInputStateCreateInfo vertexInputState{};
@@ -48,6 +59,19 @@ struct VectorHasher
         for (const T& i : v)
             h ^= std::hash<T>{}(i) + 0x9e3779b9 + (h << 6U) + (h >> 2U);
         return h;
+    }
+};
+
+template <>
+struct std::hash<VoxelDynamics::Vulkan::ShaderModuleConfig>
+{
+    size_t operator()(const VoxelDynamics::Vulkan::ShaderModuleConfig& v) const noexcept
+    {
+        size_t seed = 0;
+        hash_combine(seed, VectorHasher<char>{}(v.spirvBytecode));
+        hash_combine(seed, static_cast<uint32_t>(v.stage));
+        hash_combine(seed, v.entryPointName);
+        return seed;
     }
 };
 
@@ -261,13 +285,8 @@ struct std::hash<VoxelDynamics::Vulkan::PipelineConfig>
         size_t h = 0;
 
         // shader stages
-        hash_combine(h, VectorHasher<char>{}(k.spvCode));
-
-        for (const auto& stage : k.stages)
-            hash_combine(h, stage);
-
-        for (const auto& name : k.names)
-            hash_combine(h, name);
+        for (const auto& shaderModuleConfig : k.shaderModuleConfigs)
+            hash_combine(h, shaderModuleConfig);
 
         // fixed-function state
         hash_combine(h, k.vertexInputState);

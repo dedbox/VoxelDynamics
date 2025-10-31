@@ -1,5 +1,3 @@
-#include "spirv_reflect.h"
-
 #include "VoxelDynamics/Vulkan/PipelineManager.hpp"
 
 namespace VoxelDynamics::Vulkan
@@ -11,107 +9,13 @@ PipelineManager::PipelineManager(const Context* context, vk::raii::PipelineCache
 {
 }
 
-std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> PipelineManager::
-    createLayout(const PipelineConfig& config) const
-{
-    // analyze the shader module
-    SpvReflectShaderModule module;
-    SpvReflectResult result =
-        spvReflectCreateShaderModule(config.spvCode.size(), config.spvCode.data(), &module);
-    if (result != SPV_REFLECT_RESULT_SUCCESS)
-        throw std::runtime_error("Could not reflect on SPIR-V module");
-
-    // discover descriptor set layouts and push constant ranges
-    std::vector<vk::raii::DescriptorSetLayout> setLayouts;
-    std::vector<vk::PushConstantRange> pushConstantRanges;
-
-    for (const auto& [stage, name] : std::ranges::views::zip(config.stages, config.names))
-    {
-        std::vector<vk::DescriptorSetLayoutBinding> bindings;
-
-        // query descriptor sets
-        uint32_t setCount = 0;
-        spvReflectEnumerateDescriptorSets(&module, &setCount, nullptr);
-
-        std::vector<SpvReflectDescriptorSet*> sets(setCount);
-        spvReflectEnumerateDescriptorSets(&module, &setCount, sets.data());
-
-        Log::Core::Info(
-            "Shader stage {} ({}) has {} descriptor sets", vk::to_string(stage), name, setCount);
-
-        // discover bindings
-        for (const auto& [i, set] : std::ranges::views::enumerate(sets))
-        {
-            for (const auto& [j, binding] : std::ranges::views::enumerate(
-                     std::span<SpvReflectDescriptorBinding*>(set->bindings, set->binding_count)))
-            {
-                const auto descriptorCount =
-                    std::ranges::fold_left(binding->array.dims, 1, std::multiplies<>{});
-
-                Log::Core::Info(
-                    "  Binding set {}, binding {} ({}) has {} descriptors",
-                    i,
-                    j,
-                    binding->name,
-                    descriptorCount);
-
-                vk::DescriptorSetLayoutBinding layoutBinding(
-                    binding->binding,
-                    static_cast<vk::DescriptorType>(binding->descriptor_type),
-                    descriptorCount,
-                    static_cast<vk::ShaderStageFlagBits>(module.shader_stage),
-                    nullptr);
-
-                bindings.push_back(layoutBinding);
-            }
-
-            vk::DescriptorSetLayoutCreateInfo createInfo({}, set->binding_count, bindings.data());
-            setLayouts.emplace_back(*_context->getDevice(), createInfo);
-
-            Log::Core::Info("  Loaded SPIR-V stage: {} ({})", vk::to_string(stage), name);
-        }
-
-        // query push constants
-        uint32_t blockCount = 0;
-        spvReflectEnumeratePushConstantBlocks(&module, &blockCount, nullptr);
-
-        std::vector<SpvReflectBlockVariable*> blocks(blockCount);
-        spvReflectEnumeratePushConstantBlocks(&module, &blockCount, blocks.data());
-
-        Log::Core::Info("Found {} push constant blocks", blockCount);
-
-        // discover push constant ranges
-        for (const auto& [i, block] : std::ranges::views::enumerate(blocks))
-        {
-            Log::Core::Info("  [{}] {}", i, block->name);
-
-            pushConstantRanges.emplace_back(
-                static_cast<vk::ShaderStageFlagBits>(block->decoration_flags),
-                block->offset,
-                block->size);
-        }
-    }
-
-    spvReflectDestroyShaderModule(&module);
-
-    // create pipeline layout
-    std::vector<vk::DescriptorSetLayout> rawLayouts;
-    rawLayouts.reserve(setLayouts.size());
-    for (const auto& layout : setLayouts)
-        rawLayouts.push_back(*layout);
-
-    vk::PipelineLayoutCreateInfo createInfo({}, rawLayouts, pushConstantRanges);
-    auto layout = vk::raii::PipelineLayout(*_context->getDevice(), createInfo);
-
-    return std::make_pair(std::move(layout), std::move(setLayouts));
-}
-
 const vk::raii::PipelineLayout& PipelineManager::getPipelineLayout(const PipelineConfig& config)
 {
     if (_layoutCacheMap.contains(config))
         return _layoutCacheMap.at(config);
 
-    auto [layout, setLayouts] = createLayout(config);
+    auto [layout, setLayouts] =
+        generatePipelineLayout(config.shaderModuleConfigs, config.debugName);
     _layoutCacheMap.insert({config, std::move(layout)});
 
     return _layoutCacheMap.at(config);
@@ -122,24 +26,42 @@ const vk::raii::Pipeline& PipelineManager::getGraphicsPipeline(const PipelineCon
     if (_pipelineCacheMap.contains(config))
         return _pipelineCacheMap.at(config);
 
-    // load shader modules
-    vk::ShaderModuleCreateInfo moduleCreateInfo(
-        {}, config.spvCode.size(), reinterpret_cast<const uint32_t*>(config.spvCode.data()));
-    vk::raii::ShaderModule module(*_context->getDevice(), moduleCreateInfo);
-
-    // get pipeline layout
+    // collect shader stage info
     std::vector<vk::PipelineShaderStageCreateInfo> stageInfos;
-    for (const auto& [stage, name] : std::ranges::views::zip(config.stages, config.names))
-        stageInfos.emplace_back(vk::PipelineShaderStageCreateFlags{}, stage, *module, name.c_str());
+    stageInfos.reserve(config.shaderModuleConfigs.size());
 
+    std::vector<vk::raii::ShaderModule> modules;
+    for (const auto& shaderModuleConfig : config.shaderModuleConfigs)
+    {
+        vk::ShaderModuleCreateInfo moduleInfo(
+            {},
+            shaderModuleConfig.spirvBytecode.size(),
+            reinterpret_cast<const uint32_t*>(shaderModuleConfig.spirvBytecode.data()));
+        modules.emplace_back(*_context->getDevice(), moduleInfo);
+
+        _context->setDebugName(
+            vk::ObjectType::eShaderModule,
+            &**modules.back(),
+            std::format("Shader Module ({})", vk::to_string(shaderModuleConfig.stage)));
+
+        vk::PipelineShaderStageCreateInfo stageInfo(
+            {},
+            shaderModuleConfig.stage,
+            *modules.back(),
+            shaderModuleConfig.entryPointName.c_str());
+
+        stageInfos.push_back(stageInfo);
+    }
+
+    // find or create the pipeline layout
     vk::PipelineLayout layout = getPipelineLayout(config);
 
-    // dynamic states
+    // configure dynamic states
     const std::vector<vk::DynamicState> dynamicStates = {
         vk::DynamicState::eViewport, vk::DynamicState::eScissor};
     vk::PipelineDynamicStateCreateInfo dynamicStateInfo({}, dynamicStates);
 
-    // color blending
+    // configure color blending
     vk::PipelineColorBlendAttachmentState colorBlendAttachment{};
     colorBlendAttachment.colorWriteMask =
         vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
@@ -167,9 +89,172 @@ const vk::raii::Pipeline& PipelineManager::getGraphicsPipeline(const PipelineCon
         &config.renderingCreateInfo); // pNext
 
     auto pipeline = _context->getDevice()->createGraphicsPipeline(_pipelineCache, createInfo);
+
+    _context->setDebugName(vk::ObjectType::ePipeline, &**pipeline, config.debugName);
+
     _pipelineCacheMap.insert({config, std::move(pipeline)});
 
     return _pipelineCacheMap.at(config);
+}
+
+void PipelineManager::CombineDescriptorSetBindings(
+    std::map<uint32_t, std::map<uint32_t, vk::DescriptorSetLayoutBinding>>& globalBindings,
+    const SpvReflectDescriptorSet& set,
+    vk::ShaderStageFlagBits stage)
+{
+    const auto bindings = std::span<SpvReflectDescriptorBinding*>(set.bindings, set.binding_count);
+
+    for (const auto& binding : bindings)
+    {
+        uint32_t setNumber     = set.set;
+        uint32_t bindingNumber = binding->binding;
+
+        if (globalBindings.contains(setNumber) &&
+            globalBindings.at(setNumber).contains(bindingNumber))
+            // binding exists: add this stage to existing stages
+            globalBindings.at(setNumber).at(bindingNumber).stageFlags |= stage;
+        else
+        {
+            // new binding
+            vk::DescriptorSetLayoutBinding new_binding(
+                bindingNumber,
+                static_cast<vk::DescriptorType>(binding->descriptor_type),
+                binding->count,
+                stage,
+                nullptr);
+            globalBindings[setNumber][bindingNumber] = new_binding;
+        }
+    }
+}
+
+std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> PipelineManager::
+    generatePipelineLayout(
+        const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
+        const std::string& debugName) const
+{
+    std::map<uint32_t, std::map<uint32_t, vk::DescriptorSetLayoutBinding>> globalBindings;
+    std::vector<vk::PushConstantRange> pushConstantRanges;
+
+    for (const auto& config : shaderModuleConfigs)
+    {
+        Log::Core::Info(
+            "Loading SPIR-V shader: {}, stage: {}", debugName, vk::to_string(config.stage));
+
+        // create reflection module
+        SpvReflectShaderModule module;
+        SpvReflectResult result = spvReflectCreateShaderModule(
+            config.spirvBytecode.size(), config.spirvBytecode.data(), &module);
+
+        if (result != SPV_REFLECT_RESULT_SUCCESS)
+            throw std::runtime_error("Could not create SPIRV-Reflect shader module");
+
+        // find the entry point
+        const SpvReflectEntryPoint* entryPoint =
+            spvReflectGetEntryPoint(&module, config.entryPointName.c_str());
+
+        if (entryPoint == nullptr)
+            throw std::runtime_error("Could not find SPIR-V shader module entry point");
+
+        Log::Core::Info("  entry point: {}", config.entryPointName);
+
+        // combine descriptor sets
+        const auto descriptorSets = std::span<SpvReflectDescriptorSet>(
+            entryPoint->descriptor_sets, entryPoint->descriptor_set_count);
+
+        Log::Core::Info("  number of descriptor sets: {}", descriptorSets.size());
+
+        for (const auto& [i, descriptorSet] : std::ranges::views::enumerate(descriptorSets))
+        {
+            CombineDescriptorSetBindings(globalBindings, descriptorSet, config.stage);
+
+            Log::Core::Info(
+                "    set {} has {} binding{}:",
+                i,
+                descriptorSet.binding_count,
+                descriptorSet.binding_count == 1 ? "" : "s");
+            const auto bindings = std::span<SpvReflectDescriptorBinding*>(
+                descriptorSet.bindings, descriptorSet.binding_count);
+            for (const auto& binding : bindings)
+            {
+                if (binding->array.dims_count == 0)
+                    Log::Core::Info("      [{}] {}", binding->binding, binding->name);
+                else if (binding->count == 0)
+                    Log::Core::Info(
+                        "      [{}] {} is a runtime array", binding->binding, binding->name);
+                else
+                {
+                    const auto dims =
+                        std::span<uint32_t>(&binding->array.dims[0], binding->array.dims_count);
+                    const std::string dimsStr =
+                        dims | std::ranges::views::transform([](uint32_t dim) {
+                            return std::format("{}", dim);
+                        }) |
+                        std::ranges::views::join_with('x') | std::ranges::to<std::string>();
+                    Log::Core::Info(
+                        "      [{}] {} is a {}-dimensional array",
+                        binding->binding,
+                        binding->name,
+                        dimsStr);
+                }
+            }
+        }
+
+        // combine push constants
+        uint32_t numBlocks{};
+        result = spvReflectEnumerateEntryPointPushConstantBlocks(
+            &module, config.entryPointName.c_str(), &numBlocks, nullptr);
+
+        if (result != SPV_REFLECT_RESULT_SUCCESS)
+            throw std::runtime_error("Could not determine SPIR-V push constant block count");
+
+        Log::Core::Info("  number of push constant blocks: {}", numBlocks);
+
+        std::vector<SpvReflectBlockVariable*> blocks(numBlocks);
+        result = spvReflectEnumerateEntryPointPushConstantBlocks(
+            &module, config.entryPointName.c_str(), &numBlocks, blocks.data());
+
+        if (result != SPV_REFLECT_RESULT_SUCCESS)
+            throw std::runtime_error("Could not load SPIR-V push constant blocks");
+
+        for (const auto& [i, block] : std::ranges::views::enumerate(blocks))
+        {
+            pushConstantRanges.emplace_back(config.stage, block->offset, block->size);
+            Log::Core::Info("    block {}: offset = {}, size = {}", i, block->offset, block->size);
+        }
+
+        // destroy the reflection module
+        spvReflectDestroyShaderModule(&module);
+    }
+
+    // create descriptor set layouts
+    std::vector<vk::raii::DescriptorSetLayout> descriptorSetLayouts;
+    std::vector<vk::DescriptorSetLayout> raw_descriptorSetLayouts;
+    for (const auto& [i, pair] : std::ranges::views::enumerate(globalBindings))
+    {
+        const auto& [setNumber, setBindings] = pair;
+
+        std::vector<vk::DescriptorSetLayoutBinding> bindings;
+        for (const auto& [bindingNumber, binding] : setBindings)
+            bindings.push_back(binding);
+
+        vk::DescriptorSetLayoutCreateInfo layoutInfo({}, bindings);
+        descriptorSetLayouts.emplace_back(
+            _context->getDevice()->createDescriptorSetLayout(layoutInfo));
+        raw_descriptorSetLayouts.push_back(*descriptorSetLayouts.back());
+
+        _context->setDebugName(
+            vk::ObjectType::eDescriptorSetLayout,
+            &**descriptorSetLayouts.back(),
+            std::format("{} Descriptor Set Layout {}", debugName, i));
+    }
+
+    vk::PipelineLayoutCreateInfo createInfo({}, raw_descriptorSetLayouts, pushConstantRanges);
+    vk::raii::PipelineLayout pipelineLayout(*_context->getDevice(), createInfo);
+
+    _context->setDebugName(
+        vk::ObjectType::ePipelineLayout, &**pipelineLayout, std::format("{} Layout", debugName));
+
+    return std::make_pair(std::move(pipelineLayout), std::move(descriptorSetLayouts));
 }
 
 } // namespace VoxelDynamics::Vulkan

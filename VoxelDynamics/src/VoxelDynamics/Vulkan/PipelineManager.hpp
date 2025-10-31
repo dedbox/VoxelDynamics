@@ -1,5 +1,6 @@
 #pragma once
 
+#include "spirv_reflect.h"
 #include "vulkan/vulkan_raii.hpp"
 
 #include "VoxelDynamics/Vulkan/Context.hpp"
@@ -22,8 +23,15 @@ private:
     std::unordered_map<PipelineConfig, vk::raii::Pipeline> _pipelineCacheMap;
     std::unordered_map<PipelineConfig, vk::raii::PipelineLayout> _layoutCacheMap;
 
-    std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> createLayout(
-        const PipelineConfig& config) const;
+    static void CombineDescriptorSetBindings(
+        std::map<uint32_t, std::map<uint32_t, vk::DescriptorSetLayoutBinding>>& global_bindings,
+        const SpvReflectDescriptorSet& reflect_set,
+        vk::ShaderStageFlagBits stage);
+
+    std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>>
+    generatePipelineLayout(
+        const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
+        const std::string& debugName) const;
 };
 
 } // namespace VoxelDynamics::Vulkan

@@ -1,20 +1,13 @@
 #include <VoxelDynamics.hpp>
 
 // #include "VoxelDynamics/Core/Time.hpp"
-// #include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/vector_float2.hpp"
 #include "glm/ext/vector_float3.hpp"
 // #include "glm/gtc/matrix_transform.hpp"
 // #include "glm/trigonometric.hpp"
 
 // Sandbox App /////////////////////////////////////////////////////////////////////////////////////
-
-// struct UniformBufferObject
-// {
-//     glm::mat4 model;
-//     glm::mat4 view;
-//     glm::mat4 projection;
-// };
 
 //     void onResize(const Event::WindowResuze& event)
 //     {
@@ -79,6 +72,13 @@ struct Vertex
                 1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)),
         };
     }
+};
+
+struct UniformBufferObject
+{
+    glm::mat4 model;
+    // glm::mat4 view;
+    // glm::mat4 projection;
 };
 
 class Sandbox : public Application
@@ -189,9 +189,18 @@ private:
     const vk::raii::Pipeline& createGraphicsPipeline()
     {
         Vulkan::PipelineConfig config;
-        config.spvCode = readFile("shaders/shader1.slang.spv");
-        config.stages  = {vk::ShaderStageFlagBits::eVertex, vk::ShaderStageFlagBits::eFragment};
-        config.names   = {"vertMain", "fragMain"};
+        config.debugName = "Shader2 Pipeline";
+
+        const auto spvCode = readFile("shaders/shader2.slang.spv");
+
+        config.shaderModuleConfigs = {
+            {.spirvBytecode  = spvCode,
+             .stage          = vk::ShaderStageFlagBits::eVertex,
+             .entryPointName = "vertMain"},
+            {.spirvBytecode  = spvCode,
+             .stage          = vk::ShaderStageFlagBits::eFragment,
+             .entryPointName = "fragMain"},
+        };
 
         const auto& vertexBindingDescription         = Vertex::getBindingDescription();
         const auto& vertexInputAttributeDescriptions = Vertex::getAttributeDescriptions();
