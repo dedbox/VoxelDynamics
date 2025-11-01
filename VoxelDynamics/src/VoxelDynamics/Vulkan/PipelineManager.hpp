@@ -32,6 +32,15 @@ private:
     generatePipelineLayout(
         const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
         const std::string& debugName) const;
+
+    static void LogShaderModuleConfig(
+        const std::string& debugName,
+        const ShaderModuleConfig& config,
+        const SpvReflectEntryPoint* entryPoint);
+
+    static std::string toString(SpvReflectDescriptorType type);
+    static std::string arrayDimensions(SpvReflectArrayTraits& array);
+    static std::string arrayDimensions(SpvReflectBindingArrayTraits& array);
 };
 
 } // namespace VoxelDynamics::Vulkan
