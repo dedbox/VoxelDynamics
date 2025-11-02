@@ -142,7 +142,7 @@ public:
     void onUpdate(double /*deltaTime*/) override
     {
         _renderer.drawFrame(
-            _window, _graphicsPipeline, [&](const vk::raii::CommandBuffer& cmdBuffer) {
+            _window, *_graphicsPipeline, [&](const vk::raii::CommandBuffer& cmdBuffer) {
                 // bind vertex data
                 cmdBuffer.bindVertexBuffers(
                     0,                     // first binding
@@ -182,11 +182,11 @@ public:
     }
 
 private:
-    const vk::raii::Pipeline& _graphicsPipeline;
+    Vulkan::Pipeline _graphicsPipeline;
     Vulkan::Buffer _vertexBuffer;
     Vulkan::Buffer _indexBuffer;
 
-    const vk::raii::Pipeline& createGraphicsPipeline()
+    Vulkan::Pipeline createGraphicsPipeline()
     {
         Vulkan::PipelineConfig config;
         config.debugName = "Shader2 Pipeline";

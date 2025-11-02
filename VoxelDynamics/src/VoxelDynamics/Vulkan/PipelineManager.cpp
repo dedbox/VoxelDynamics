@@ -21,10 +21,16 @@ const vk::raii::PipelineLayout& PipelineManager::getPipelineLayout(const Pipelin
     return _layoutCacheMap.at(config);
 }
 
-const vk::raii::Pipeline& PipelineManager::getGraphicsPipeline(const PipelineConfig& config)
+Pipeline PipelineManager::getGraphicsPipeline(const PipelineConfig& config)
 {
+    // find or create the pipeline layout
+    const vk::raii::PipelineLayout& layout = getPipelineLayout(config);
+
     if (_pipelineCacheMap.contains(config))
-        return _pipelineCacheMap.at(config);
+    {
+        const vk::raii::Pipeline& pipeline = _pipelineCacheMap.at(config);
+        return Pipeline(pipeline, layout);
+    }
 
     // collect shader stage info
     std::vector<vk::PipelineShaderStageCreateInfo> stageInfos;
@@ -52,9 +58,6 @@ const vk::raii::Pipeline& PipelineManager::getGraphicsPipeline(const PipelineCon
 
         stageInfos.push_back(stageInfo);
     }
-
-    // find or create the pipeline layout
-    vk::PipelineLayout layout = getPipelineLayout(config);
 
     // configure dynamic states
     const std::vector<vk::DynamicState> dynamicStates = {
@@ -88,13 +91,15 @@ const vk::raii::Pipeline& PipelineManager::getGraphicsPipeline(const PipelineCon
         -1,                           // base pipeline index
         &config.renderingCreateInfo); // pNext
 
-    auto pipeline = _context->getDevice()->createGraphicsPipeline(_pipelineCache, createInfo);
+    auto new_pipeline = _context->getDevice()->createGraphicsPipeline(_pipelineCache, createInfo);
 
-    _context->setDebugName(vk::ObjectType::ePipeline, &**pipeline, config.debugName);
+    _context->setDebugName(vk::ObjectType::ePipeline, &**new_pipeline, config.debugName);
 
-    _pipelineCacheMap.insert({config, std::move(pipeline)});
+    _pipelineCacheMap.insert({config, std::move(new_pipeline)});
 
-    return _pipelineCacheMap.at(config);
+    const vk::raii::Pipeline& pipeline = _pipelineCacheMap.at(config);
+
+    return Pipeline(pipeline, layout);
 }
 
 void PipelineManager::CombineDescriptorSetBindings(
