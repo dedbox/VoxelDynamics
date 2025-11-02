@@ -16,35 +16,37 @@ const Pipeline& PipelineManager::getGraphicsPipeline(const PipelineConfig& confi
         return _pipelineCacheMap.at(config);
 
     // otherwise, start creating a new pipeline
-    auto [pipelineLayout, descriptorSetLayouts] =
-        generatePipelineLayout(config.shaderModuleConfigs, config.debugName);
-
-    // collect shader stage info
     std::vector<vk::PipelineShaderStageCreateInfo> stageInfos;
     stageInfos.reserve(config.shaderModuleConfigs.size());
 
-    std::vector<vk::raii::ShaderModule> modules;
+    std::vector<vk::raii::ShaderModule> vk_modules;
     for (const auto& shaderModuleConfig : config.shaderModuleConfigs)
     {
         vk::ShaderModuleCreateInfo moduleInfo(
             {},
             shaderModuleConfig.spirvBytecode.size(),
             reinterpret_cast<const uint32_t*>(shaderModuleConfig.spirvBytecode.data()));
-        modules.emplace_back(*_context->getDevice(), moduleInfo);
+        vk_modules.emplace_back(*_context->getDevice(), moduleInfo);
 
         _context->setDebugName(
             vk::ObjectType::eShaderModule,
-            &**modules.back(),
+            &**vk_modules.back(),
             std::format("Shader Module ({})", vk::to_string(shaderModuleConfig.stage)));
 
         vk::PipelineShaderStageCreateInfo stageInfo(
             {},
             shaderModuleConfig.stage,
-            *modules.back(),
+            *vk_modules.back(),
             shaderModuleConfig.entryPointName.c_str());
 
         stageInfos.push_back(stageInfo);
     }
+
+    auto&& [modules, entryPoints] =
+        loadShaderModuleConfigs(config.shaderModuleConfigs, config.debugName);
+
+    auto [pipelineLayout, descriptorSetLayouts] =
+        generatePipelineLayout(config.shaderModuleConfigs, modules, entryPoints, config.debugName);
 
     // configure dynamic states
     const std::vector<vk::DynamicState> dynamicStates = {
@@ -86,50 +88,26 @@ const Pipeline& PipelineManager::getGraphicsPipeline(const PipelineConfig& confi
 
     _pipelineCacheMap.insert({config, std::move(pipeline)});
 
+    for (auto& module : modules)
+        spvReflectDestroyShaderModule(&module);
+
     return _pipelineCacheMap.at(config);
 }
 
-void PipelineManager::CombineDescriptorSetBindings(
-    std::map<uint32_t, std::map<uint32_t, vk::DescriptorSetLayoutBinding>>& globalBindings,
-    const SpvReflectDescriptorSet& set,
-    vk::ShaderStageFlagBits stage)
+std::pair<std::vector<SpvReflectShaderModule>, std::vector<const SpvReflectEntryPoint*>>
+PipelineManager::loadShaderModuleConfigs(
+    const std::vector<ShaderModuleConfig>& shaderModuleConfigs, const std::string& debugName) const
 {
-    const auto bindings = std::span<SpvReflectDescriptorBinding*>(set.bindings, set.binding_count);
 
-    for (const auto& binding : bindings)
-    {
-        uint32_t setNumber     = set.set;
-        uint32_t bindingNumber = binding->binding;
+    std::vector<SpvReflectShaderModule> modules;
+    modules.reserve(shaderModuleConfigs.size());
 
-        if (globalBindings.contains(setNumber) &&
-            globalBindings.at(setNumber).contains(bindingNumber))
-            // binding exists: add this stage to existing stages
-            globalBindings.at(setNumber).at(bindingNumber).stageFlags |= stage;
-        else
-        {
-            // new binding
-            vk::DescriptorSetLayoutBinding new_binding(
-                bindingNumber,
-                static_cast<vk::DescriptorType>(binding->descriptor_type),
-                binding->count,
-                stage,
-                nullptr);
-            globalBindings[setNumber][bindingNumber] = new_binding;
-        }
-    }
-}
-
-std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> PipelineManager::
-    generatePipelineLayout(
-        const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
-        const std::string& debugName) const
-{
-    std::map<uint32_t, std::map<uint32_t, vk::DescriptorSetLayoutBinding>> globalBindings;
-    std::vector<vk::PushConstantRange> pushConstantRanges;
+    std::vector<const SpvReflectEntryPoint*> entryPoints;
+    entryPoints.reserve(shaderModuleConfigs.size());
 
     for (const auto& config : shaderModuleConfigs)
     {
-        // create reflection module
+        // load module
         SpvReflectShaderModule module;
         SpvReflectResult result = spvReflectCreateShaderModule(
             config.spirvBytecode.size(), config.spirvBytecode.data(), &module);
@@ -137,7 +115,9 @@ std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> 
         if (result != SPV_REFLECT_RESULT_SUCCESS)
             throw std::runtime_error("Could not create SPIRV-Reflect shader module");
 
-        // find the entry point
+        modules.push_back(module);
+
+        // find entry point
         const SpvReflectEntryPoint* entryPoint =
             spvReflectGetEntryPoint(&module, config.entryPointName.c_str());
 
@@ -146,16 +126,119 @@ std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> 
 
         LogEntryPoint(debugName, config, entryPoint);
 
+        entryPoints.push_back(entryPoint);
+    }
+
+    return std::make_pair(modules, entryPoints);
+}
+
+std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> PipelineManager::
+    generatePipelineLayout(
+        const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
+        const std::vector<SpvReflectShaderModule>& modules,
+        const std::vector<const SpvReflectEntryPoint*>& entryPoints,
+        const std::string& debugName) const
+{
+    std::vector<vk::raii::DescriptorSetLayout> descriptorSetLayouts =
+        generateDescriptorSetLayouts(shaderModuleConfigs, entryPoints, debugName);
+
+    std::vector<vk::PushConstantRange> pushConstantRanges =
+        generatePushConstantRanges(shaderModuleConfigs, modules, entryPoints, debugName);
+
+    // create pipeline layout
+    const auto raw_descriptorSetLayouts =
+        descriptorSetLayouts |
+        std::ranges::views::transform([](const auto& layout) { return *layout; }) |
+        std::ranges::to<std::vector<vk::DescriptorSetLayout>>();
+
+    vk::PipelineLayoutCreateInfo createInfo({}, raw_descriptorSetLayouts, pushConstantRanges);
+    vk::raii::PipelineLayout pipelineLayout(*_context->getDevice(), createInfo);
+
+    _context->setDebugName(
+        vk::ObjectType::ePipelineLayout, &**pipelineLayout, std::format("{} Layout", debugName));
+
+    return std::make_pair(std::move(pipelineLayout), std::move(descriptorSetLayouts));
+}
+
+std::vector<vk::raii::DescriptorSetLayout> PipelineManager::generateDescriptorSetLayouts(
+    const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
+    const std::vector<const SpvReflectEntryPoint*>& entryPoints,
+    const std::string& debugName) const
+{
+    std::map<uint32_t, std::map<uint32_t, vk::DescriptorSetLayoutBinding>> globalBindings;
+
+    for (const auto& [config, entryPoint] :
+         std::ranges::views::zip(shaderModuleConfigs, entryPoints))
+    {
         // combine descriptor sets
         const auto descriptorSets = std::span<SpvReflectDescriptorSet>(
             entryPoint->descriptor_sets, entryPoint->descriptor_set_count);
 
         for (const auto& [i, descriptorSet] : std::ranges::views::enumerate(descriptorSets))
-            CombineDescriptorSetBindings(globalBindings, descriptorSet, config.stage);
+        {
+            const auto bindings = std::span<SpvReflectDescriptorBinding*>(
+                descriptorSet.bindings, descriptorSet.binding_count);
 
+            for (const auto& binding : bindings)
+            {
+                uint32_t setNumber     = descriptorSet.set;
+                uint32_t bindingNumber = binding->binding;
+
+                if (globalBindings.contains(setNumber) &&
+                    globalBindings.at(setNumber).contains(bindingNumber))
+                    globalBindings.at(setNumber).at(bindingNumber).stageFlags |= config.stage;
+
+                else
+                {
+                    vk::DescriptorSetLayoutBinding new_binding(
+                        bindingNumber,
+                        static_cast<vk::DescriptorType>(binding->descriptor_type),
+                        binding->count,
+                        config.stage,
+                        nullptr);
+                    globalBindings[setNumber][bindingNumber] = new_binding;
+                }
+            }
+        }
+    }
+
+    // create descriptor set layouts
+    std::vector<vk::raii::DescriptorSetLayout> descriptorSetLayouts;
+    for (const auto& [i, pair] : std::ranges::views::enumerate(globalBindings))
+    {
+        const auto& [setNumber, setBindings] = pair;
+
+        std::vector<vk::DescriptorSetLayoutBinding> bindings;
+        for (const auto& [bindingNumber, binding] : setBindings)
+            bindings.push_back(binding);
+
+        vk::DescriptorSetLayoutCreateInfo layoutInfo({}, bindings);
+        descriptorSetLayouts.emplace_back(
+            _context->getDevice()->createDescriptorSetLayout(layoutInfo));
+
+        _context->setDebugName(
+            vk::ObjectType::eDescriptorSetLayout,
+            &**descriptorSetLayouts.back(),
+            std::format("{} Descriptor Set Layout {}", debugName, i));
+    }
+
+    return descriptorSetLayouts;
+}
+
+std::vector<vk::PushConstantRange> PipelineManager::generatePushConstantRanges(
+    const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
+    const std::vector<SpvReflectShaderModule>& modules,
+    const std::vector<const SpvReflectEntryPoint*>& entryPoints,
+    const std::string& debugName) const
+{
+    std::vector<vk::PushConstantRange> pushConstantRanges;
+
+    for (const auto& [config, module, entryPoint] :
+         std::ranges::views::zip(shaderModuleConfigs, modules, entryPoints))
+    {
         // find push constant blocks
         uint32_t numBlocks{};
-        result = spvReflectEnumerateEntryPointPushConstantBlocks(
+        SpvReflectResult result = spvReflectEnumerateEntryPointPushConstantBlocks(
             &module, config.entryPointName.c_str(), &numBlocks, nullptr);
 
         if (result != SPV_REFLECT_RESULT_SUCCESS)
@@ -173,40 +256,9 @@ std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> 
         // determine push constant ranges
         for (const auto& [i, block] : std::ranges::views::enumerate(blocks))
             pushConstantRanges.emplace_back(config.stage, block->offset, block->size);
-
-        // destroy the reflection module
-        spvReflectDestroyShaderModule(&module);
     }
 
-    // create descriptor set layouts
-    std::vector<vk::raii::DescriptorSetLayout> descriptorSetLayouts;
-    std::vector<vk::DescriptorSetLayout> raw_descriptorSetLayouts;
-    for (const auto& [i, pair] : std::ranges::views::enumerate(globalBindings))
-    {
-        const auto& [setNumber, setBindings] = pair;
-
-        std::vector<vk::DescriptorSetLayoutBinding> bindings;
-        for (const auto& [bindingNumber, binding] : setBindings)
-            bindings.push_back(binding);
-
-        vk::DescriptorSetLayoutCreateInfo layoutInfo({}, bindings);
-        descriptorSetLayouts.emplace_back(
-            _context->getDevice()->createDescriptorSetLayout(layoutInfo));
-        raw_descriptorSetLayouts.push_back(*descriptorSetLayouts.back());
-
-        _context->setDebugName(
-            vk::ObjectType::eDescriptorSetLayout,
-            &**descriptorSetLayouts.back(),
-            std::format("{} Descriptor Set Layout {}", debugName, i));
-    }
-
-    vk::PipelineLayoutCreateInfo createInfo({}, raw_descriptorSetLayouts, pushConstantRanges);
-    vk::raii::PipelineLayout pipelineLayout(*_context->getDevice(), createInfo);
-
-    _context->setDebugName(
-        vk::ObjectType::ePipelineLayout, &**pipelineLayout, std::format("{} Layout", debugName));
-
-    return std::make_pair(std::move(pipelineLayout), std::move(descriptorSetLayouts));
+    return pushConstantRanges;
 }
 
 void PipelineManager::LogEntryPoint(

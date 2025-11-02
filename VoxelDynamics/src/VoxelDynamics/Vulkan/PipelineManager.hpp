@@ -47,14 +47,27 @@ private:
     vk::raii::PipelineCache _pipelineCache;
     std::unordered_map<PipelineConfig, Pipeline> _pipelineCacheMap;
 
-    static void CombineDescriptorSetBindings(
-        std::map<uint32_t, std::map<uint32_t, vk::DescriptorSetLayoutBinding>>& global_bindings,
-        const SpvReflectDescriptorSet& reflect_set,
-        vk::ShaderStageFlagBits stage);
+    std::pair<std::vector<SpvReflectShaderModule>, std::vector<const SpvReflectEntryPoint*>>
+    loadShaderModuleConfigs(
+        const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
+        const std::string& debugName) const;
 
     std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>>
     generatePipelineLayout(
         const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
+        const std::vector<SpvReflectShaderModule>& modules,
+        const std::vector<const SpvReflectEntryPoint*>& entryPoints,
+        const std::string& debugName) const;
+
+    std::vector<vk::raii::DescriptorSetLayout> generateDescriptorSetLayouts(
+        const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
+        const std::vector<const SpvReflectEntryPoint*>& entryPoints,
+        const std::string& debugName) const;
+
+    std::vector<vk::PushConstantRange> generatePushConstantRanges(
+        const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
+        const std::vector<SpvReflectShaderModule>& modules,
+        const std::vector<const SpvReflectEntryPoint*>& entryPoints,
         const std::string& debugName) const;
 
     static void LogEntryPoint(
