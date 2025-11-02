@@ -77,8 +77,8 @@ struct Vertex
 struct UniformBufferObject
 {
     glm::mat4 model;
-    // glm::mat4 view;
-    // glm::mat4 projection;
+    glm::mat4 view;
+    glm::mat4 projection;
 };
 
 class Sandbox : public Application
@@ -157,6 +157,20 @@ public:
                 //         0,                                // first set
                 //         *frame.descriptorSet,             // descriptor sets
                 //         nullptr);                         // dynamic offsets
+
+                // cmdBuffer.bindDescriptorSets(
+                //     vk::PipelineBindPoint::eGraphics,
+                //     _graphicsPipeline.layout,
+                //     0,
+                //     const ArrayProxy<const vk::DescriptorSet>& descriptorSets,
+                //     nullptr);
+
+                // cmdBuffer.bindDescriptorSets(
+                //     vk::PipelineBindPoint pipelineBindPoint,
+                //     vk::PipelineLayout layout,
+                //     uint32_t firstSet,
+                //     const ArrayProxy<const vk::DescriptorSet>& descriptorSets,
+                //     const ArrayProxy<const uint32_t> &dynamicOffsets)
 
                 // bind index data
                 cmdBuffer.bindIndexBuffer(
