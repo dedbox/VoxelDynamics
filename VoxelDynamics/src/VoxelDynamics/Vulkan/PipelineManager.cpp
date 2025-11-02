@@ -144,7 +144,7 @@ std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> 
         if (entryPoint == nullptr)
             throw std::runtime_error("Could not find SPIR-V shader module entry point");
 
-        LogShaderModuleConfig(debugName, config, entryPoint);
+        LogEntryPoint(debugName, config, entryPoint);
 
         // combine descriptor sets
         const auto descriptorSets = std::span<SpvReflectDescriptorSet>(
@@ -153,15 +153,13 @@ std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> 
         for (const auto& [i, descriptorSet] : std::ranges::views::enumerate(descriptorSets))
             CombineDescriptorSetBindings(globalBindings, descriptorSet, config.stage);
 
-        // combine push constants
+        // find push constant blocks
         uint32_t numBlocks{};
         result = spvReflectEnumerateEntryPointPushConstantBlocks(
             &module, config.entryPointName.c_str(), &numBlocks, nullptr);
 
         if (result != SPV_REFLECT_RESULT_SUCCESS)
             throw std::runtime_error("Could not determine SPIR-V push constant block count");
-
-        Log::Core::Info("  number of push constant blocks: {}", numBlocks);
 
         std::vector<SpvReflectBlockVariable*> blocks(numBlocks);
         result = spvReflectEnumerateEntryPointPushConstantBlocks(
@@ -170,11 +168,11 @@ std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> 
         if (result != SPV_REFLECT_RESULT_SUCCESS)
             throw std::runtime_error("Could not load SPIR-V push constant blocks");
 
+        LogPushConstants(debugName, config, blocks);
+
+        // determine push constant ranges
         for (const auto& [i, block] : std::ranges::views::enumerate(blocks))
-        {
             pushConstantRanges.emplace_back(config.stage, block->offset, block->size);
-            Log::Core::Info("    block {}: offset = {}, size = {}", i, block->offset, block->size);
-        }
 
         // destroy the reflection module
         spvReflectDestroyShaderModule(&module);
@@ -211,19 +209,25 @@ std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> 
     return std::make_pair(std::move(pipelineLayout), std::move(descriptorSetLayouts));
 }
 
-void PipelineManager::LogShaderModuleConfig(
+void PipelineManager::LogEntryPoint(
     const std::string& debugName,
     const ShaderModuleConfig& config,
     const SpvReflectEntryPoint* entryPoint)
 {
-    Log::Core::Info("Loading SPIR-V shader: {}, stage: {}", debugName, vk::to_string(config.stage));
-
+    Log::Core::Info("Loading SPIR-V shader ({})", debugName);
+    Log::Core::Info("  stage: {}", vk::to_string(config.stage));
     Log::Core::Info("  entry point: {}", config.entryPointName);
 
     const auto descriptorSets = std::span<SpvReflectDescriptorSet>(
         entryPoint->descriptor_sets, entryPoint->descriptor_set_count);
 
-    Log::Core::Info("  number of descriptor sets: {}", descriptorSets.size());
+    Log::Core::Info(
+        "{} > {} has {} descriptor set{}{}",
+        debugName,
+        config.entryPointName,
+        descriptorSets.size(),
+        descriptorSets.size() == 1 ? "" : "s",
+        descriptorSets.size() == 0 ? "" : ":");
 
     for (const auto& [i, descriptorSet] : std::ranges::views::enumerate(descriptorSets))
     {
@@ -231,47 +235,67 @@ void PipelineManager::LogShaderModuleConfig(
             descriptorSet.bindings, descriptorSet.binding_count);
 
         Log::Core::Info(
-            "    set {} has {} binding{}:", i, bindings.size(), bindings.size() == 1 ? "" : "s");
+            "  set {} has {} binding{}{}",
+            i,
+            bindings.size(),
+            bindings.size() == 1 ? "" : "s",
+            bindings.size() == 0 ? "" : ":");
 
         for (const auto& [j, binding] : std::ranges::views::enumerate(bindings))
         {
             Log::Core::Info(
-                "      binding {} is a{}:", binding->binding, toString(binding->descriptor_type));
+                "    binding {} is a{}:", binding->binding, toString(binding->descriptor_type));
 
             if (binding->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
                 binding->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER)
             {
-                Log::Core::Info("        name: {}", binding->block.name);
-                Log::Core::Info("        size: {} bytes", binding->block.size);
-                Log::Core::Info("        member count: {}", binding->block.member_count);
+                Log::Core::Info("      name: {}", binding->block.name);
+                Log::Core::Info("      size: {} bytes", binding->block.size);
+                Log::Core::Info("      member count: {}", binding->block.member_count);
 
                 std::span<SpvReflectBlockVariable> members(
                     binding->block.members, binding->block.member_count);
 
                 for (const auto& [i, member] : std::ranges::views::enumerate(members))
                 {
-                    Log::Core::Info("        member {}:", i);
-                    Log::Core::Info("          name: {}", member.name);
-                    Log::Core::Info("          type: {}", member.type_description->type_name);
-                    Log::Core::Info("          byte offset: {}", member.offset);
-                    Log::Core::Info("          size: {} bytes", member.size);
+                    Log::Core::Info("      member {}:", i);
+                    Log::Core::Info("        name: {}", member.name);
+                    Log::Core::Info("        type: {}", member.type_description->type_name);
+                    Log::Core::Info("        byte offset: {}", member.offset);
+                    Log::Core::Info("        size: {} bytes", member.size);
 
                     if (member.type_description->op == SpvOpTypeArray ||
                         member.type_description->op == SpvOpTypeRuntimeArray)
-                        Log::Core::Info("          dimensions: {}", arrayDimensions(member.array));
+                        Log::Core::Info("        dimensions: {}", arrayDimensions(member.array));
                 }
             }
 
             else if (binding->count == 0)
-                Log::Core::Info("        array type: runtime", binding->binding, binding->name);
+                Log::Core::Info("      array type: runtime", binding->binding, binding->name);
 
             else
             {
-                Log::Core::Info("        array type: static");
-                Log::Core::Info("        dimensions: {}", arrayDimensions(binding->array));
+                Log::Core::Info("      array type: static");
+                Log::Core::Info("      dimensions: {}", arrayDimensions(binding->array));
             }
         }
     }
+}
+
+void PipelineManager::LogPushConstants(
+    const std::string& debugName,
+    const ShaderModuleConfig& config,
+    const std::vector<SpvReflectBlockVariable*>& blocks)
+{
+    Log::Core::Info(
+        "{} > {} has {} push constant block{}",
+        debugName,
+        config.entryPointName,
+        blocks.size(),
+        blocks.size() == 1 ? "" : "s");
+
+    for (const auto& [i, block] : std::ranges::views::enumerate(blocks))
+        Log::Core::Info("  block {}: offset = {}, size = {}", i, block->offset, block->size);
 }
 
 std::string PipelineManager::toString(SpvReflectDescriptorType type)

@@ -57,10 +57,15 @@ private:
         const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
         const std::string& debugName) const;
 
-    static void LogShaderModuleConfig(
+    static void LogEntryPoint(
         const std::string& debugName,
         const ShaderModuleConfig& config,
         const SpvReflectEntryPoint* entryPoint);
+
+    static void LogPushConstants(
+        const std::string& debugName,
+        const ShaderModuleConfig& config,
+        const std::vector<SpvReflectBlockVariable*>& blocks);
 
     static std::string toString(SpvReflectDescriptorType type);
     static std::string arrayDimensions(SpvReflectArrayTraits& array);
