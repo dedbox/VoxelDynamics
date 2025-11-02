@@ -196,11 +196,11 @@ public:
     }
 
 private:
-    Vulkan::Pipeline _graphicsPipeline;
+    const Vulkan::Pipeline& _graphicsPipeline;
     Vulkan::Buffer _vertexBuffer;
     Vulkan::Buffer _indexBuffer;
 
-    Vulkan::Pipeline createGraphicsPipeline()
+    const Vulkan::Pipeline& createGraphicsPipeline()
     {
         Vulkan::PipelineConfig config;
         config.debugName = "Shader2 Pipeline";

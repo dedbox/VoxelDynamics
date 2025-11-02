@@ -9,28 +9,15 @@ PipelineManager::PipelineManager(const Context* context, vk::raii::PipelineCache
 {
 }
 
-const vk::raii::PipelineLayout& PipelineManager::getPipelineLayout(const PipelineConfig& config)
+const Pipeline& PipelineManager::getGraphicsPipeline(const PipelineConfig& config)
 {
-    if (_layoutCacheMap.contains(config))
-        return _layoutCacheMap.at(config);
-
-    auto [layout, setLayouts] =
-        generatePipelineLayout(config.shaderModuleConfigs, config.debugName);
-    _layoutCacheMap.insert({config, std::move(layout)});
-
-    return _layoutCacheMap.at(config);
-}
-
-Pipeline PipelineManager::getGraphicsPipeline(const PipelineConfig& config)
-{
-    // find or create the pipeline layout
-    const vk::raii::PipelineLayout& layout = getPipelineLayout(config);
-
+    // return cached pipeline, if it exists
     if (_pipelineCacheMap.contains(config))
-    {
-        const vk::raii::Pipeline& pipeline = _pipelineCacheMap.at(config);
-        return Pipeline(pipeline, layout);
-    }
+        return _pipelineCacheMap.at(config);
+
+    // otherwise, start creating a new pipeline
+    auto [pipelineLayout, descriptorSetLayouts] =
+        generatePipelineLayout(config.shaderModuleConfigs, config.debugName);
 
     // collect shader stage info
     std::vector<vk::PipelineShaderStageCreateInfo> stageInfos;
@@ -84,7 +71,7 @@ Pipeline PipelineManager::getGraphicsPipeline(const PipelineConfig& config)
         nullptr,                      // depth/stencil state
         &colorBlendState,             // color blend state
         &dynamicStateInfo,            // dynamic states
-        layout,                       // pipeline layout
+        pipelineLayout,               // pipeline layout
         VK_NULL_HANDLE,               // rendering pass
         0,                            // subpass
         nullptr,                      // base pipeline handle
@@ -95,11 +82,11 @@ Pipeline PipelineManager::getGraphicsPipeline(const PipelineConfig& config)
 
     _context->setDebugName(vk::ObjectType::ePipeline, &**new_pipeline, config.debugName);
 
-    _pipelineCacheMap.insert({config, std::move(new_pipeline)});
+    Pipeline pipeline(std::move(new_pipeline), std::move(pipelineLayout));
 
-    const vk::raii::Pipeline& pipeline = _pipelineCacheMap.at(config);
+    _pipelineCacheMap.insert({config, std::move(pipeline)});
 
-    return Pipeline(pipeline, layout);
+    return _pipelineCacheMap.at(config);
 }
 
 void PipelineManager::CombineDescriptorSetBindings(

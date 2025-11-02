@@ -11,26 +11,27 @@ namespace VoxelDynamics::Vulkan
 
 struct Pipeline
 {
-    const vk::raii::Pipeline& pipeline;
-    const vk::raii::PipelineLayout& layout;
+    vk::raii::Pipeline pipeline;
+    vk::raii::PipelineLayout layout;
 
-    Pipeline(const vk::raii::Pipeline& pipeline_, const vk::raii::PipelineLayout& layout_)
-        : pipeline(pipeline_)
-        , layout(layout_)
+    Pipeline(vk::raii::Pipeline pipeline_, vk::raii::PipelineLayout layout_)
+        : pipeline(std::move(pipeline_))
+        , layout(std::move(layout_))
     {
     }
 
     ~Pipeline() = default;
 
-    // prevent move
-    Pipeline(Pipeline&&)            = delete;
-    Pipeline& operator=(Pipeline&&) = delete;
+    // allow move
+    Pipeline(Pipeline&&)            = default;
+    Pipeline& operator=(Pipeline&&) = default;
 
     // prevent copy
     Pipeline(const Pipeline&)            = delete;
     Pipeline& operator=(const Pipeline&) = delete;
 
     // proxy dereference operator
+    vk::raii::Pipeline& operator*() { return pipeline; }
     const vk::raii::Pipeline& operator*() const { return pipeline; }
 };
 
@@ -39,15 +40,12 @@ class PipelineManager
 public:
     PipelineManager(const Context* context, vk::raii::PipelineCache pipelineCache);
 
-    Pipeline getGraphicsPipeline(const PipelineConfig& config);
+    const Pipeline& getGraphicsPipeline(const PipelineConfig& config);
 
 private:
     const Context* _context;
     vk::raii::PipelineCache _pipelineCache;
-    std::unordered_map<PipelineConfig, vk::raii::Pipeline> _pipelineCacheMap;
-    std::unordered_map<PipelineConfig, vk::raii::PipelineLayout> _layoutCacheMap;
-
-    const vk::raii::PipelineLayout& getPipelineLayout(const PipelineConfig& config);
+    std::unordered_map<PipelineConfig, Pipeline> _pipelineCacheMap;
 
     static void CombineDescriptorSetBindings(
         std::map<uint32_t, std::map<uint32_t, vk::DescriptorSetLayoutBinding>>& global_bindings,
