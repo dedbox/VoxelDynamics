@@ -21,10 +21,12 @@ struct PipelineConfig
     std::string debugName = "Shader Pipeline";
 
     // shader stages
-    std::vector<ShaderModuleConfig> shaderModuleConfigs;
+    std::vector<ShaderModuleConfig> modules;
+
+    // vertex input
+    size_t vertexStride = 0;
 
     // fixed-function state
-    vk::PipelineVertexInputStateCreateInfo vertexInputState{};
     vk::PipelineInputAssemblyStateCreateInfo inputAssemblyState{};
     // vk::PipelineTessellationStateCreateInfo tesselationState{};
     vk::PipelineViewportStateCreateInfo viewportState{};
@@ -285,11 +287,14 @@ struct std::hash<VoxelDynamics::Vulkan::PipelineConfig>
         size_t h = 0;
 
         // shader stages
-        for (const auto& shaderModuleConfig : k.shaderModuleConfigs)
+        for (const auto& shaderModuleConfig : k.modules)
             hash_combine(h, shaderModuleConfig);
 
+        // vertex input
+        hash_combine(h, k.vertexStride);
+
         // fixed-function state
-        hash_combine(h, k.vertexInputState);
+        // hash_combine(h, k.vertexInputState); // moved to hash key
         hash_combine(h, k.inputAssemblyState);
         // hash_combind(h, k.tesselationState);
         hash_combine(h, k.viewportState);
@@ -301,6 +306,21 @@ struct std::hash<VoxelDynamics::Vulkan::PipelineConfig>
         // dynamic rendering state
         hash_combine(h, k.renderingCreateInfo);
 
+        return h;
+    }
+};
+
+template <>
+struct std::hash<
+    std::pair<VoxelDynamics::Vulkan::PipelineConfig, vk::PipelineVertexInputStateCreateInfo>>
+{
+    size_t operator()(const std::pair<
+                      VoxelDynamics::Vulkan::PipelineConfig,
+                      vk::PipelineVertexInputStateCreateInfo>& p) const noexcept
+    {
+        size_t h = 0;
+        hash_combine(h, p.first);
+        hash_combine(h, p.second);
         return h;
     }
 };

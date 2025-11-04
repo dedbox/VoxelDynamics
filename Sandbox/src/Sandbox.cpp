@@ -55,22 +55,13 @@ struct Vertex
     glm::vec2 position;
     glm::vec3 color;
 
-    static vk::VertexInputBindingDescription getBindingDescription()
+    static uint32_t getLocationOffset(uint32_t location)
     {
-        return vk::VertexInputBindingDescription(
-            0,                             // binding index
-            sizeof(Vertex),                // stride
-            vk::VertexInputRate::eVertex); // input rate
-    }
-
-    static std::array<vk::VertexInputAttributeDescription, 2> getAttributeDescriptions()
-    {
-        return {
-            vk::VertexInputAttributeDescription(
-                0, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, position)),
-            vk::VertexInputAttributeDescription(
-                1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)),
-        };
+        // clang-format off
+        if (location == 0) return offsetof(Vertex, position);
+        if (location == 1) return offsetof(Vertex, color);
+        throw std::runtime_error("Unknown attribute location for offset mapping");
+        // clang-format on
     }
 };
 
@@ -207,7 +198,7 @@ private:
 
         const auto spvCode = readFile("shaders/shader2.slang.spv");
 
-        config.shaderModuleConfigs = {
+        config.modules = {
             {.spirvBytecode  = spvCode,
              .stage          = vk::ShaderStageFlagBits::eVertex,
              .entryPointName = "vertMain"},
@@ -216,13 +207,7 @@ private:
              .entryPointName = "fragMain"},
         };
 
-        const auto& vertexBindingDescription         = Vertex::getBindingDescription();
-        const auto& vertexInputAttributeDescriptions = Vertex::getAttributeDescriptions();
-
-        config.vertexInputState = vk::PipelineVertexInputStateCreateInfo(
-            {},                                // flags
-            vertexBindingDescription,          // vertex binding descriptions
-            vertexInputAttributeDescriptions); // vertex input attribute descriptions
+        config.vertexStride = sizeof(Vertex);
 
         config.inputAssemblyState = vk::PipelineInputAssemblyStateCreateInfo(
             {},                                   // flags
@@ -282,7 +267,7 @@ private:
             vk::Format::eUndefined,                        // depth attachment format
             vk::Format::eUndefined);                       // stencil attachment format
 
-        return _renderer.getPipelineManager().getGraphicsPipeline(config);
+        return _renderer.getPipelineManager().getGraphicsPipeline(config, Vertex::getLocationOffset);
     }
 };
 

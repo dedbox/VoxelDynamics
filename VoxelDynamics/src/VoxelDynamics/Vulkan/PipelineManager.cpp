@@ -9,18 +9,45 @@ PipelineManager::PipelineManager(const Context* context, vk::raii::PipelineCache
 {
 }
 
-const Pipeline& PipelineManager::getGraphicsPipeline(const PipelineConfig& config)
+const Pipeline& PipelineManager::getGraphicsPipeline(
+    const PipelineConfig& config, const std::function<uint32_t(uint32_t)>& getLocationOffset)
 {
+    auto&& [modules, entryPoints] = loadShaderModuleConfigs(config.modules, config.debugName);
+
+    // create vertex input descriptions
+    const auto vertexDescs = [&]() -> std::optional<std::pair<
+                                       std::optional<vk::VertexInputBindingDescription>,
+                                       std::vector<vk::VertexInputAttributeDescription>>> {
+        auto it = std::ranges::find(
+            config.modules, vk::ShaderStageFlagBits::eVertex, &ShaderModuleConfig::stage);
+
+        if (it == config.modules.end())
+            return std::nullopt;
+
+        auto i = std::ranges::distance(config.modules.begin(), it);
+
+        const auto [bindingDesc, attribDescs] = generateVertexInputDescriptions(
+            modules[i], config.vertexStride, getLocationOffset, config.debugName);
+
+        return std::make_pair(bindingDesc, attribDescs);
+    }();
+
+    const auto bindingDesc =
+        vertexDescs.transform([](auto& p) { return p.first.value_or({}); }).value_or({});
+    const auto attribDescs = vertexDescs.transform([](auto& p) { return p.second; }).value_or({});
+    const auto vertexInputState =
+        vk::PipelineVertexInputStateCreateInfo({}, bindingDesc, attribDescs);
+
     // return cached pipeline, if it exists
-    if (_pipelineCacheMap.contains(config))
-        return _pipelineCacheMap.at(config);
+    if (_pipelineCacheMap.contains({config, vertexInputState}))
+        return _pipelineCacheMap.at({config, vertexInputState});
 
     // otherwise, start creating a new pipeline
     std::vector<vk::PipelineShaderStageCreateInfo> stageInfos;
-    stageInfos.reserve(config.shaderModuleConfigs.size());
+    stageInfos.reserve(config.modules.size());
 
     std::vector<vk::raii::ShaderModule> vk_modules;
-    for (const auto& shaderModuleConfig : config.shaderModuleConfigs)
+    for (const auto& shaderModuleConfig : config.modules)
     {
         vk::ShaderModuleCreateInfo moduleInfo(
             {},
@@ -42,11 +69,9 @@ const Pipeline& PipelineManager::getGraphicsPipeline(const PipelineConfig& confi
         stageInfos.push_back(stageInfo);
     }
 
-    auto&& [modules, entryPoints] =
-        loadShaderModuleConfigs(config.shaderModuleConfigs, config.debugName);
-
+    // create layouts
     auto [pipelineLayout, descriptorSetLayouts] =
-        generatePipelineLayout(config.shaderModuleConfigs, modules, entryPoints, config.debugName);
+        generatePipelineLayout(config.modules, modules, entryPoints, config.debugName);
 
     // configure dynamic states
     const std::vector<vk::DynamicState> dynamicStates = {
@@ -64,7 +89,7 @@ const Pipeline& PipelineManager::getGraphicsPipeline(const PipelineConfig& confi
     vk::GraphicsPipelineCreateInfo createInfo(
         {},                           // flags
         stageInfos,                   // stages
-        &config.vertexInputState,     // vertex input state
+        &vertexInputState,            // vertex input state
         &config.inputAssemblyState,   // input assembly state
         nullptr,                      // tesselation state
         &config.viewportState,        // viewport state
@@ -86,18 +111,19 @@ const Pipeline& PipelineManager::getGraphicsPipeline(const PipelineConfig& confi
 
     Pipeline pipeline(std::move(new_pipeline), std::move(pipelineLayout));
 
-    _pipelineCacheMap.insert({config, std::move(pipeline)});
+    _pipelineCacheMap.insert({{config, vertexInputState}, std::move(pipeline)});
 
     for (auto& module : modules)
         spvReflectDestroyShaderModule(&module);
 
-    return _pipelineCacheMap.at(config);
+    return _pipelineCacheMap.at({config, vertexInputState});
 }
 
 std::pair<std::vector<SpvReflectShaderModule>, std::vector<const SpvReflectEntryPoint*>>
 PipelineManager::loadShaderModuleConfigs(
     const std::vector<ShaderModuleConfig>& shaderModuleConfigs, const std::string& debugName) const
 {
+    Log::Core::Info("Loading SPIR-V shader ({})", debugName);
 
     std::vector<SpvReflectShaderModule> modules;
     modules.reserve(shaderModuleConfigs.size());
@@ -130,6 +156,74 @@ PipelineManager::loadShaderModuleConfigs(
     }
 
     return std::make_pair(modules, entryPoints);
+}
+
+std::pair<
+    std::optional<vk::VertexInputBindingDescription>,
+    std::vector<vk::VertexInputAttributeDescription>>
+PipelineManager::generateVertexInputDescriptions(
+    const SpvReflectShaderModule& module,
+    size_t vertexStride,
+    const std::function<uint32_t(uint32_t)>& getLocationOffset,
+    const std::string& debugName) const
+{
+    // find all input variables
+    uint32_t numVars{};
+    spvReflectEnumerateInputVariables(&module, &numVars, nullptr);
+
+    std::vector<SpvReflectInterfaceVariable*> all_vars(numVars);
+    spvReflectEnumerateInputVariables(&module, &numVars, all_vars.data());
+
+    // remove built-in variables
+    auto user_vars =
+        all_vars | std::views::filter([](const SpvReflectInterfaceVariable* var) -> bool {
+            return var->built_in == -1;
+        });
+
+    // sort by location
+    std::vector<SpvReflectInterfaceVariable*> vars(
+        std::ranges::begin(user_vars), std::ranges::end(user_vars));
+
+    std::ranges::sort(vars, std::less<uint32_t>{}, &SpvReflectInterfaceVariable::location);
+
+    Log::Core::Info(
+        "{} has {} user-defined vertex input variable{}:",
+        debugName,
+        vars.size(),
+        vars.size() == 1 ? "" : "s");
+
+    for (const auto& [i, var] : std::ranges::views::enumerate(vars))
+    {
+        Log::Core::Info("  variable {}:", i);
+        Log::Core::Info("    name: {}", var->name);
+        Log::Core::Info("    location: {}", var->location);
+        Log::Core::Info("    format: {}", vk::to_string(static_cast<vk::Format>(var->format)));
+        Log::Core::Info("    offset: {}", getLocationOffset(var->location));
+    }
+
+    // create binding description
+    std::optional<vk::VertexInputBindingDescription> bindingDesc;
+    if (vars.empty())
+        bindingDesc = std::nullopt;
+    else
+    {
+        bindingDesc = vk::VertexInputBindingDescription(
+            0, // TODO support multiple vertex input bindings
+            static_cast<uint32_t>(vertexStride),
+            vk::VertexInputRate::eVertex);
+    }
+
+    // create attribute descriptions
+    std::vector<vk::VertexInputAttributeDescription> attribDescs;
+    attribDescs.reserve(vars.size());
+    for (const auto& var : vars)
+        attribDescs.emplace_back(
+            var->location,
+            0, // TODO support multiple vertex input bindings
+            static_cast<vk::Format>(var->format),
+            getLocationOffset(var->location));
+
+    return std::make_pair(bindingDesc, attribDescs);
 }
 
 std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> PipelineManager::
@@ -266,7 +360,7 @@ void PipelineManager::LogEntryPoint(
     const ShaderModuleConfig& config,
     const SpvReflectEntryPoint* entryPoint)
 {
-    Log::Core::Info("Loading SPIR-V shader ({})", debugName);
+    Log::Core::Info("Reflecting SPIR-V shader ({})", debugName);
     Log::Core::Info("  stage: {}", vk::to_string(config.stage));
     Log::Core::Info("  entry point: {}", config.entryPointName);
 

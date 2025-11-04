@@ -40,16 +40,27 @@ class PipelineManager
 public:
     PipelineManager(const Context* context, vk::raii::PipelineCache pipelineCache);
 
-    const Pipeline& getGraphicsPipeline(const PipelineConfig& config);
+    const Pipeline& getGraphicsPipeline(
+        const PipelineConfig& config, const std::function<uint32_t(uint32_t)>& getLocationOffset);
 
 private:
     const Context* _context;
     vk::raii::PipelineCache _pipelineCache;
-    std::unordered_map<PipelineConfig, Pipeline> _pipelineCacheMap;
+    std::unordered_map<std::pair<PipelineConfig, vk::PipelineVertexInputStateCreateInfo>, Pipeline>
+        _pipelineCacheMap;
 
     std::pair<std::vector<SpvReflectShaderModule>, std::vector<const SpvReflectEntryPoint*>>
     loadShaderModuleConfigs(
         const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
+        const std::string& debugName) const;
+
+    std::pair<
+        std::optional<vk::VertexInputBindingDescription>,
+        std::vector<vk::VertexInputAttributeDescription>>
+    generateVertexInputDescriptions(
+        const SpvReflectShaderModule& module,
+        size_t vertexStride,
+        const std::function<uint32_t(uint32_t)>& getLocationOffset,
         const std::string& debugName) const;
 
     std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>>

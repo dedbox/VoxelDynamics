@@ -262,9 +262,11 @@ void Renderer::transitionImageLayout(
 
 void Renderer::recreateSwapChain(const Window& window)
 {
+    Log::Core::Info("Recreating swap chain");
+
     wait();
     cleanupSwapChain();
-    createSwapChain(window);
+    _swapChain = createSwapChain(window);
 }
 
 SwapChain Renderer::createSwapChain(const Window& window) const
@@ -467,7 +469,7 @@ SwapChain Renderer::createSwapChain(const Window& window) const
 
     Log::Core::Info("Swap chain created:");
     Log::Core::Info("  number of swap chain images: {}", imageCount);
-    Log::Core::Info("  chosen format: {}", Context::SurfaceFormatName(surfaceFormat));
+    Log::Core::Info("  surface format: {}", Context::SurfaceFormatName(surfaceFormat));
     Log::Core::Info("  present mode: {}", vk::to_string(presentMode));
     Log::Core::Info("  extent: {}x{}", extent.width, extent.height);
 
@@ -483,7 +485,6 @@ SwapChain Renderer::createSwapChain(const Window& window) const
 
 void Renderer::cleanupSwapChain()
 {
-
     _swapChain.swapChain = VK_NULL_HANDLE;
     _swapChain.images.clear();
     _swapChain.frames.clear();
