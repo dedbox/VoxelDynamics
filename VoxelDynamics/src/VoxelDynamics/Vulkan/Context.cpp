@@ -170,6 +170,48 @@ PhysicalDevice Context::pickPhysicalDevice() const
     throw std::runtime_error("No suitable physical device found");
 }
 
+Buffer Context::createBuffer(
+    vk::DeviceSize size,
+    vk::BufferUsageFlags usage,
+    vk::MemoryPropertyFlags properties,
+    const std::string& bufferName,
+    const std::string& memoryName) const
+{
+    // create buffer handle
+    vk::BufferCreateInfo createInfo({}, size, usage, vk::SharingMode::eExclusive);
+    vk::raii::Buffer buffer(*_device, createInfo);
+
+    setDebugName(vk::ObjectType::eBuffer, &**buffer, bufferName);
+
+    // allocate buffer memory
+    const auto memReqs = buffer.getMemoryRequirements();
+    const auto memType = findMemoryType(memReqs.memoryTypeBits, properties);
+
+    vk::MemoryAllocateInfo allocInfo(memReqs.size, memType);
+    vk::raii::DeviceMemory memory(*_device, allocInfo);
+
+    setDebugName(vk::ObjectType::eDeviceMemory, &**memory, memoryName);
+
+    // associate the memory with the handle
+    buffer.bindMemory(*memory, 0);
+
+    return Buffer(std::move(buffer), std::move(memory));
+}
+
+uint32_t Context::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const
+{
+    // query available memory types
+    vk::PhysicalDeviceMemoryProperties memProps = _physicalDevice->getMemoryProperties();
+
+    // find a suitable type
+    for (const auto& [i, memType] : std::ranges::views::enumerate(memProps.memoryTypes))
+        if ((typeFilter & (1U << static_cast<uint32_t>(i))) &&
+            (memType.propertyFlags & properties) == properties)
+            return i;
+
+    throw std::runtime_error("Could not find a suitable memory type");
+}
+
 std::string Context::SurfaceFormatName(const vk::SurfaceFormatKHR& format)
 {
     return vk::to_string(format.format) + " / " + vk::to_string(format.colorSpace);

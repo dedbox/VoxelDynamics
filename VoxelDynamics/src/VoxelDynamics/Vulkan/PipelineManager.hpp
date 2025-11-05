@@ -3,6 +3,7 @@
 #include "spirv_reflect.h"
 #include "vulkan/vulkan_raii.hpp"
 
+#include "VoxelDynamics/Vulkan/Buffer.hpp"
 #include "VoxelDynamics/Vulkan/Context.hpp"
 #include "VoxelDynamics/Vulkan/PipelineConfig.hpp"
 

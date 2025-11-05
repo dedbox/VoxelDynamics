@@ -497,51 +497,6 @@ const FrameData& Renderer::getCurrentFrameData() const
 
 // Command Buffers /////////////////////////////////////////////////////////////////////////////////
 
-Buffer Renderer::createBuffer(
-    vk::DeviceSize size,
-    vk::BufferUsageFlags usage,
-    vk::MemoryPropertyFlags properties,
-    const std::string& bufferName,
-    const std::string& memoryName) const
-{
-    const auto& device = _context->getDevice();
-
-    // create buffer handle
-    vk::BufferCreateInfo createInfo({}, size, usage, vk::SharingMode::eExclusive);
-    vk::raii::Buffer buffer(*device, createInfo);
-
-    _context->setDebugName(vk::ObjectType::eBuffer, &**buffer, bufferName);
-
-    // allocate buffer memory
-    const auto memReqs = buffer.getMemoryRequirements();
-    const auto memType = findMemoryType(memReqs.memoryTypeBits, properties);
-
-    vk::MemoryAllocateInfo allocInfo(memReqs.size, memType);
-    vk::raii::DeviceMemory memory(*device, allocInfo);
-
-    _context->setDebugName(vk::ObjectType::eDeviceMemory, &**memory, memoryName);
-
-    // associate the memory with the handle
-    buffer.bindMemory(*memory, 0);
-
-    return Buffer(std::move(buffer), std::move(memory));
-}
-
-uint32_t Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const
-{
-    // query available memory types
-    vk::PhysicalDeviceMemoryProperties memProps =
-        _context->getPhysicalDevice()->getMemoryProperties();
-
-    // find a suitable type
-    for (const auto& [i, memType] : std::ranges::views::enumerate(memProps.memoryTypes))
-        if ((typeFilter & (1U << static_cast<uint32_t>(i))) &&
-            (memType.propertyFlags & properties) == properties)
-            return i;
-
-    throw std::runtime_error("Could not find a suitable memory type");
-}
-
 Buffer Renderer::createAndTransferBuffer(
     vk::BufferUsageFlagBits usage,
     RenderQueue destQueue,
@@ -556,7 +511,7 @@ Buffer Renderer::createAndTransferBuffer(
     const auto& physicalDevice = _context->getPhysicalDevice();
 
     // allocate a host buffer
-    auto&& [hostBuffer, hostMemory] = createBuffer(
+    auto&& [hostBuffer, hostMemory] = _context->createBuffer(
         size,
         vk::BufferUsageFlagBits::eTransferSrc,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
@@ -569,7 +524,7 @@ Buffer Renderer::createAndTransferBuffer(
     hostMemory.unmapMemory();
 
     // allocate a device-local buffer
-    auto&& [deviceBuffer, deviceMemory] = createBuffer(
+    auto&& [deviceBuffer, deviceMemory] = _context->createBuffer(
         size,
         usage | vk::BufferUsageFlagBits::eTransferDst,
         vk::MemoryPropertyFlagBits::eDeviceLocal,

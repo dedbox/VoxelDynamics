@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VoxelDynamics/Core/Window.hpp"
+#include "VoxelDynamics/Vulkan/Buffer.hpp"
 #include "VoxelDynamics/Vulkan/CommandBufferManager.hpp"
 #include "VoxelDynamics/Vulkan/Context.hpp"
 #include "VoxelDynamics/Vulkan/PipelineManager.hpp"
@@ -65,20 +66,6 @@ struct SwapChain
     const vk::raii::SwapchainKHR* operator->() const { return &swapChain; }
 };
 
-/** A block of data allocated in physical memory.
- *
- * A Buffer object contains a Vulkan buffer handle and a device memory handle. The buffer handle
- * defines the size and intended usage of the buffer (e.g., vertex or index data). The device memory
- * handle represents an actual block of memory allocated from a specific memory heap on a physical
- * device such as in GPU RAM or a host-visible memory region.
- */
-class Buffer
-{
-public:
-    vk::raii::Buffer buffer;
-    vk::raii::DeviceMemory memory;
-};
-
 /** Uses a Context to construct a SwapChain and implement the high-level drawing logic.
  *
  * The Renderer is responsible for creating, resizing, and managing the life cycle of the
@@ -139,15 +126,6 @@ private:
     const FrameData& getCurrentFrameData() const;
 
     // Command Buffers /////////////////////////////////////////////////////////////////////////////
-
-    Buffer createBuffer(
-        vk::DeviceSize size,
-        vk::BufferUsageFlags usage,
-        vk::MemoryPropertyFlags properties,
-        const std::string& bufferName,
-        const std::string& memoryName) const;
-
-    uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
 
     Buffer createAndTransferBuffer(
         vk::BufferUsageFlagBits usage,

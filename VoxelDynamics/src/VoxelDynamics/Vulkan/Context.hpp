@@ -3,6 +3,7 @@
 #include "vulkan/vulkan_raii.hpp"
 
 #include "VoxelDynamics/Core/Window.hpp"
+#include "VoxelDynamics/Vulkan/Buffer.hpp"
 #include "VoxelDynamics/Vulkan/Device.hpp"
 #include "VoxelDynamics/Vulkan/Instance.hpp"
 #include "VoxelDynamics/Vulkan/PhysicalDevice.hpp"
@@ -45,6 +46,13 @@ public:
     const PhysicalDevice& getPhysicalDevice() const { return _physicalDevice; }
     const Device& getDevice() const { return _device; }
 
+    Buffer createBuffer(
+        vk::DeviceSize size,
+        vk::BufferUsageFlags usage,
+        vk::MemoryPropertyFlags properties,
+        const std::string& bufferName,
+        const std::string& memoryName) const;
+
     void setDebugName(vk::ObjectType type, void* handle, const std::string& name) const;
 
     static std::string SurfaceFormatName(const vk::SurfaceFormatKHR& format);
@@ -60,6 +68,8 @@ private:
 
     vk::raii::SurfaceKHR createSurface(Window& window) const;
     PhysicalDevice pickPhysicalDevice() const;
+
+    uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
 };
 
 } // namespace VoxelDynamics::Vulkan
