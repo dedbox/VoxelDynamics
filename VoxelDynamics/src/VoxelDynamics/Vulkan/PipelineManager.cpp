@@ -397,6 +397,7 @@ void PipelineManager::LogEntryPoint(
             {
                 Log::Core::Info("      name: {}", binding->block.name);
                 Log::Core::Info("      size: {} bytes", binding->block.size);
+                Log::Core::Info("      padded size: {} bytes", binding->block.padded_size);
                 Log::Core::Info("      member count: {}", binding->block.member_count);
 
                 std::span<SpvReflectBlockVariable> members(
