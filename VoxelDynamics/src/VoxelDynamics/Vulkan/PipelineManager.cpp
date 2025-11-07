@@ -109,7 +109,8 @@ const Pipeline& PipelineManager::getGraphicsPipeline(
 
     _context->setDebugName(vk::ObjectType::ePipeline, &**new_pipeline, config.debugName);
 
-    Pipeline pipeline(std::move(new_pipeline), std::move(pipelineLayout));
+    Pipeline pipeline(
+        std::move(new_pipeline), std::move(pipelineLayout), std::move(descriptorSetLayouts));
 
     _pipelineCacheMap.insert({{config, vertexInputState}, std::move(pipeline)});
 
@@ -226,46 +227,6 @@ PipelineManager::generateVertexInputDescriptions(
     return std::make_pair(bindingDesc, attribDescs);
 }
 
-// std::vector<PipelineInstance::UniformBufferMap> PipelineManager::createUniformBufferMaps(
-//     uint32_t maxFramesInFlight,
-//     const std::vector<SpvReflectDescriptorSet*>& descriptorSets,
-//     const std::string& debugName) const
-// {
-//     std::vector<PipelineInstance::UniformBufferMap> uniformBufferMaps(maxFramesInFlight);
-
-//     for (const auto frameIndex : std::ranges::views::iota(0U, maxFramesInFlight))
-//         for (const auto& [i, descriptorSet] : std::ranges::views::enumerate(descriptorSets))
-//         {
-//             std::span<SpvReflectDescriptorBinding*> bindings(
-//                 descriptorSet->bindings, descriptorSet->binding_count);
-
-//             for (const auto& [j, binding] : std::ranges::views::enumerate(bindings))
-//                 if (binding->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-//                 {
-//                     const auto bufferSize = binding->block.padded_size;
-
-//                     // allocate a buffer
-//                     Buffer uniformBuffer = _context->createBuffer(
-//                         bufferSize,
-//                         vk::BufferUsageFlagBits::eUniformBuffer,
-//                         vk::MemoryPropertyFlagBits::eHostVisible |
-//                             vk::MemoryPropertyFlagBits::eHostCoherent,
-//                         std::format("{} Uniform Buffer {}.{}", debugName, i, j),
-//                         std::format("{} Uniform Buffer Memory {}.{}", debugName, i, j));
-
-//                     // map memory persistently
-//                     void* uniformBufferMapped = uniformBuffer.memory.mapMemory(0, bufferSize);
-
-//                     uniformBufferMaps.at(frameIndex)
-//                         .insert(
-//                             {{i, j},
-//                              std::make_pair(std::move(uniformBuffer), uniformBufferMapped)});
-//                 }
-//         }
-
-//     return uniformBufferMaps;
-// }
-
 std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> PipelineManager::
     generatePipelineLayout(
         const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
@@ -293,52 +254,6 @@ std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> 
 
     return std::make_pair(std::move(pipelineLayout), std::move(descriptorSetLayouts));
 }
-
-// std::vector<std::vector<SpvReflectDescriptorSet*>> PipelineManager::findDescriptorSets(
-//     const std::vector<SpvReflectShaderModule*> modules,
-//     const std::vector<SpvReflectEntryPoint*> entryPoints) const
-// {
-//     // load all descriptor sets
-//     std::vector<std::vector<SpvReflectDescriptorSet*>> allDescriptorSets(modules.size());
-
-//     for (const auto& [module, descriptorSets] : std::ranges::views::zip(modules,
-//     allDescriptorSets))
-//     {
-//         uint32_t numSets{};
-//         if (spvReflectEnumerateDescriptorSets(module, &numSets, nullptr) !=
-//             SPV_REFLECT_RESULT_SUCCESS)
-//             throw std::runtime_error("Could not determine number of descriptor sets");
-
-//         descriptorSets.resize(numSets);
-//         if (spvReflectEnumerateDescriptorSets(module, &numSets, descriptorSets.data()) !=
-//             SPV_REFLECT_RESULT_SUCCESS)
-//             throw std::runtime_error("Could not enumerate descriptor sets");
-//     }
-
-//     // filter descriptor sets by entry point
-//     std::vector<std::vector<SpvReflectDescriptorSet*>> entryPointDescriptorSets(modules.size());
-
-//     for (const auto& [entryPoint, descriptorSets, eds] :
-//          std::ranges::views::zip(entryPoints, allDescriptorSets, entryPointDescriptorSets))
-//     {
-//         bool has_bindings = false;
-//         for (const auto& descriptorSet : descriptorSets)
-//         {
-//             for (const auto& binding : std::span<SpvReflectDescriptorBinding*>(
-//                      descriptorSet->bindings, descriptorSet->binding_count))
-//                 if (binding->resource_type & entryPoint->shader_stage)
-//                 {
-//                     has_bindings = true;
-//                     break;
-//                 }
-//             if (has_bindings)
-//                 break;
-//         }
-
-//         if (has_bindings)
-//             entryPointDescriptorSets.push_back(descriptorSets);
-//     }
-// }
 
 std::vector<vk::raii::DescriptorSetLayout> PipelineManager::generateDescriptorSetLayouts(
     const std::vector<ShaderModuleConfig>& shaderModuleConfigs,

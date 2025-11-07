@@ -89,39 +89,38 @@ private:
 public:
     explicit Sandbox(BuildInfo buildInfo)
         : Application(std::move(buildInfo))
-        // , _descriptorSetLayout(createDescriptorSetLayout())
         , _graphicsPipeline(createGraphicsPipeline())
         , _vertexBuffer(
               _renderer.transferVertexData(_vertices.data(), _vertices.size() * sizeof(Vertex)))
         , _indexBuffer(
               _renderer.transferIndexData(_indices.data(), _indices.size() * sizeof(uint16_t)))
-    // , _uniformBuffers(createUniformBuffers())
-    // , _uniformBuffersMapped(createUniformBuffersMaped())
-    // , _descriptorPool(createDescriptorPool())
-    // , _descriptorSets(createDescriptorSets())
+        , _uniformBuffers(createUniformBuffers())
+        , _uniformBuffersMapped(createUniformBuffersMaped())
+        , _descriptorPool(createDescriptorPool())
+        , _descriptorSets(createDescriptorSets())
     {
     }
 
     void onCreate() override
     {
-        // // update uniform buffer
-        // UniformBufferObject ubo{
-        //     .model = glm::mat4(1.0F), .view = glm::mat4(1.0F), .projection = glm::mat4(1.0F)};
+        // update uniform buffer
+        UniformBufferObject ubo{
+            .model = glm::mat4(1.0F), .view = glm::mat4(1.0F), .projection = glm::mat4(1.0F)};
 
-        // for (const auto& uniformBufferMapped : _uniformBuffersMapped)
-        //     memcpy(uniformBufferMapped, &ubo, sizeof(ubo));
+        for (const auto& uniformBufferMapped : _uniformBuffersMapped)
+            memcpy(uniformBufferMapped, &ubo, sizeof(ubo));
 
-        // // configure descriptors
-        // for (const auto& [i, pair] : std::ranges::views::enumerate(
-        //          std::ranges::views::zip(_uniformBuffers, _descriptorSets)))
-        // {
-        //     const auto& [uniformBuffer, descriptorSet] = pair;
-        //     vk::DescriptorBufferInfo bufferInfo(*uniformBuffer, 0, sizeof(UniformBufferObject));
-        //     vk::WriteDescriptorSet descriptorWrite(
-        //         descriptorSet, 0, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo);
+        // configure descriptors
+        for (const auto& [i, pair] : std::ranges::views::enumerate(
+                 std::ranges::views::zip(_uniformBuffers, _descriptorSets)))
+        {
+            const auto& [uniformBuffer, descriptorSet] = pair;
+            vk::DescriptorBufferInfo bufferInfo(*uniformBuffer, 0, sizeof(UniformBufferObject));
+            vk::WriteDescriptorSet descriptorWrite(
+                descriptorSet, 0, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo);
 
-        //     _context.getDevice()->updateDescriptorSets(descriptorWrite, {});
-        // }
+            _context.getDevice()->updateDescriptorSets(descriptorWrite, {});
+        }
 
         // connect event listeners
         Event::Bus::Connect<Event::WindowClose, &Sandbox::onClose>(this);
@@ -164,34 +163,19 @@ public:
                     *_vertexBuffer.buffer, // buffer
                     {0});                  // offsets
 
-                // // bind uniform data
-                // if (uniformBuffer)
-                //     frame.gpBuffer.bindDescriptorSets(
-                //         vk::PipelineBindPoint::eGraphics, // pipeline bind point
-                //         *pipeline.pipelineLayout,         // pipeline layout
-                //         0,                                // first set
-                //         *frame.descriptorSet,             // descriptor sets
-                //         nullptr);                         // dynamic offsets
-
-                // cmdBuffer.bindDescriptorSets(
-                //     vk::PipelineBindPoint::eGraphics,
-                //     _graphicsPipeline.layout,
-                //     0,
-                //     const ArrayProxy<const vk::DescriptorSet>& descriptorSets,
-                //     nullptr);
-
-                // cmdBuffer.bindDescriptorSets(
-                //     vk::PipelineBindPoint pipelineBindPoint,
-                //     vk::PipelineLayout layout,
-                //     uint32_t firstSet,
-                //     const ArrayProxy<const vk::DescriptorSet>& descriptorSets,
-                //     const ArrayProxy<const uint32_t> &dynamicOffsets)
-
                 // bind index data
                 cmdBuffer.bindIndexBuffer(
                     *_indexBuffer.buffer,    // buffer
                     0,                       // offset
                     vk::IndexType::eUint16); // index type
+
+                // bind uniform data
+                cmdBuffer.bindDescriptorSets(
+                    vk::PipelineBindPoint::eGraphics,                        // pipeline bind point
+                    *_graphicsPipeline.pipelineLayout,                       // pipeline layout
+                    0,                                                       // first set
+                    *_descriptorSets[_renderer.getSwapChain().currentFrame], // descriptor sets
+                    nullptr);                                                // dynamic offsets
 
                 // issue indexed draw command
                 cmdBuffer.drawIndexed(
@@ -211,17 +195,15 @@ public:
     }
 
 private:
-    // vk::raii::DescriptorSetLayout _descriptorSetLayout;
-
     const Vulkan::Pipeline& _graphicsPipeline;
     Vulkan::Buffer _vertexBuffer;
     Vulkan::Buffer _indexBuffer;
 
-    // std::vector<Vulkan::Buffer> _uniformBuffers;
-    // std::vector<void*> _uniformBuffersMapped;
+    std::vector<Vulkan::Buffer> _uniformBuffers;
+    std::vector<void*> _uniformBuffersMapped;
 
-    // vk::raii::DescriptorPool _descriptorPool;
-    // std::vector<vk::raii::DescriptorSet> _descriptorSets;
+    vk::raii::DescriptorPool _descriptorPool;
+    std::vector<vk::raii::DescriptorSet> _descriptorSets;
 
     const Vulkan::Pipeline& createGraphicsPipeline()
     {
@@ -303,65 +285,57 @@ private:
             config, Vertex::getLocationOffset);
     }
 
-    // vk::raii::DescriptorSetLayout createDescriptorSetLayout() const
-    // {
-    //     vk::DescriptorSetLayoutBinding uboLayoutBinding(
-    //         0, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex, nullptr);
-    //     vk::DescriptorSetLayoutCreateInfo layoutInfo({}, uboLayoutBinding);
-    //     return vk::raii::DescriptorSetLayout(*_context.getDevice(), layoutInfo);
-    // }
+    std::vector<Vulkan::Buffer> createUniformBuffers() const
+    {
+        std::vector<Vulkan::Buffer> uniformBuffers;
 
-    // std::vector<Vulkan::Buffer> createUniformBuffers() const
-    // {
-    //     std::vector<Vulkan::Buffer> uniformBuffers;
+        for (const auto i : std::ranges::views::iota(0U, buildInfo.renderer.maxFramesInFlight))
+        {
+            Vulkan::Buffer buffer = _context.createBuffer(
+                sizeof(UniformBufferObject),
+                vk::BufferUsageFlagBits::eUniformBuffer,
+                vk::MemoryPropertyFlagBits::eHostVisible |
+                    vk::MemoryPropertyFlagBits::eHostCoherent,
+                "Uniform Buffer",
+                "Uniform Buffer Memory");
+            uniformBuffers.emplace_back(std::move(buffer));
+        }
 
-    //     for (const auto i : std::ranges::views::iota(0U, buildInfo.renderer.maxFramesInFlight))
-    //     {
-    //         Vulkan::Buffer buffer = _context.createBuffer(
-    //             sizeof(UniformBufferObject),
-    //             vk::BufferUsageFlagBits::eUniformBuffer,
-    //             vk::MemoryPropertyFlagBits::eHostVisible |
-    //                 vk::MemoryPropertyFlagBits::eHostCoherent,
-    //             "Uniform Buffer",
-    //             "Uniform Buffer Memory");
-    //         uniformBuffers.emplace_back(std::move(buffer));
-    //     }
+        return std::move(uniformBuffers);
+    }
 
-    //     return std::move(uniformBuffers);
-    // }
+    std::vector<void*> createUniformBuffersMaped() const
+    {
+        std::vector<void*> uniformBuffersMapped;
+        uniformBuffersMapped.reserve(_uniformBuffers.size());
 
-    // std::vector<void*> createUniformBuffersMaped() const
-    // {
-    //     std::vector<void*> uniformBuffersMapped;
-    //     uniformBuffersMapped.reserve(_uniformBuffers.size());
+        for (const auto& buffer : _uniformBuffers)
+            uniformBuffersMapped.emplace_back(
+                buffer.memory.mapMemory(0, sizeof(UniformBufferObject)));
 
-    //     for (const auto& buffer : _uniformBuffers)
-    //         uniformBuffersMapped.emplace_back(
-    //             buffer.memory.mapMemory(0, sizeof(UniformBufferObject)));
+        return uniformBuffersMapped;
+    }
 
-    //     return uniformBuffersMapped;
-    // }
+    vk::raii::DescriptorPool createDescriptorPool() const
+    {
+        vk::DescriptorPoolSize poolSize(
+            vk::DescriptorType::eUniformBuffer, buildInfo.renderer.maxFramesInFlight);
 
-    // vk::raii::DescriptorPool createDescriptorPool() const
-    // {
-    //     vk::DescriptorPoolSize poolSize(
-    //         vk::DescriptorType::eUniformBuffer, buildInfo.renderer.maxFramesInFlight);
+        vk::DescriptorPoolCreateInfo poolInfo(
+            vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+            buildInfo.renderer.maxFramesInFlight,
+            poolSize);
 
-    //     vk::DescriptorPoolCreateInfo poolInfo(
-    //         vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-    //         buildInfo.renderer.maxFramesInFlight,
-    //         poolSize);
+        return vk::raii::DescriptorPool(*_context.getDevice(), poolInfo);
+    }
 
-    //     return vk::raii::DescriptorPool(*_context.getDevice(), poolInfo);
-    // }
-
-    // std::vector<vk::raii::DescriptorSet> createDescriptorSets() const
-    // {
-    //     std::vector<vk::DescriptorSetLayout> layouts(
-    //         buildInfo.renderer.maxFramesInFlight, *_descriptorSetLayout);
-    //     vk::DescriptorSetAllocateInfo allocInfo(*_descriptorPool, layouts);
-    //     return _context.getDevice()->allocateDescriptorSets(allocInfo);
-    // }
+    std::vector<vk::raii::DescriptorSet> createDescriptorSets() const
+    {
+        std::vector<vk::DescriptorSetLayout> layouts(
+            buildInfo.renderer.maxFramesInFlight, *_graphicsPipeline.descriptorSetLayouts[0]);
+        vk::DescriptorSetAllocateInfo allocInfo(*_descriptorPool, layouts);
+        return _context.getDevice()->allocateDescriptorSets(allocInfo);
+    }
 };
 
 // Entry Point /////////////////////////////////////////////////////////////////////////////////////

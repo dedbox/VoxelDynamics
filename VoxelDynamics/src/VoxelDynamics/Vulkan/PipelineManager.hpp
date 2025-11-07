@@ -12,11 +12,16 @@ namespace VoxelDynamics::Vulkan
 struct Pipeline
 {
     vk::raii::Pipeline pipeline;
-    vk::raii::PipelineLayout layout;
+    vk::raii::PipelineLayout pipelineLayout;
+    std::vector<vk::raii::DescriptorSetLayout> descriptorSetLayouts;
 
-    Pipeline(vk::raii::Pipeline pipeline_, vk::raii::PipelineLayout layout_)
+    Pipeline(
+        vk::raii::Pipeline pipeline_,
+        vk::raii::PipelineLayout pipelineLayout_,
+        std::vector<vk::raii::DescriptorSetLayout> descriptorSetLayouts_)
         : pipeline(std::move(pipeline_))
-        , layout(std::move(layout_))
+        , pipelineLayout(std::move(pipelineLayout_))
+        , descriptorSetLayouts(std::move(descriptorSetLayouts_))
     {
     }
 
