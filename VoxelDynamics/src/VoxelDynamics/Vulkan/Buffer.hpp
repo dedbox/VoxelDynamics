@@ -17,6 +17,14 @@ class Buffer
 public:
     vk::raii::Buffer buffer;
     vk::raii::DeviceMemory memory;
+
+    // proxy dereference operator
+    vk::raii::Buffer& operator*() { return buffer; }
+    const vk::raii::Buffer& operator*() const { return buffer; }
+
+    // proxy arrow operator
+    vk::raii::Buffer* operator->() { return &buffer; }
+    const vk::raii::Buffer* operator->() const { return &buffer; }
 };
 
 } // namespace VoxelDynamics::Vulkan
