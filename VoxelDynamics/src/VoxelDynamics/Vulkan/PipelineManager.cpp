@@ -345,28 +345,51 @@ std::vector<vk::raii::DescriptorSetLayout> PipelineManager::generateDescriptorSe
     const std::vector<const SpvReflectEntryPoint*>& entryPoints,
     const std::string& debugName) const
 {
+    Log::Core::Info("Generating descriptor set layouts");
+
     std::map<uint32_t, std::map<uint32_t, vk::DescriptorSetLayoutBinding>> globalBindings;
 
-    for (const auto& [config, entryPoint] :
-         std::ranges::views::zip(shaderModuleConfigs, entryPoints))
+    for (const auto& [i, pair] :
+         std::ranges::views::enumerate(std::ranges::views::zip(shaderModuleConfigs, entryPoints)))
     {
+        const auto& [config, entryPoint] = pair;
+
         // combine descriptor sets
         const auto descriptorSets = std::span<SpvReflectDescriptorSet>(
             entryPoint->descriptor_sets, entryPoint->descriptor_set_count);
 
-        for (const auto& [i, descriptorSet] : std::ranges::views::enumerate(descriptorSets))
+        Log::Core::Info(
+            "Entry point {} ({}) has {} descriptor sets:",
+            entryPoint->name,
+            vk::to_string(config.stage),
+            descriptorSets.size());
+
+        for (const auto& [j, descriptorSet] : std::ranges::views::enumerate(descriptorSets))
         {
-            const auto bindings = std::span<SpvReflectDescriptorBinding*>(
+            const auto setNumber = descriptorSet.set;
+            const auto bindings  = std::span<SpvReflectDescriptorBinding*>(
                 descriptorSet.bindings, descriptorSet.binding_count);
 
-            for (const auto& binding : bindings)
+            Log::Core::Info(
+                "  descriptor set {} ({}) has {} bindings:", j, setNumber, bindings.size());
+
+            for (const auto& [k, binding] : std::ranges::views::enumerate(bindings))
             {
-                uint32_t setNumber     = descriptorSet.set;
                 uint32_t bindingNumber = binding->binding;
+
+                Log::Core::Info("    binding {}:", k);
+                Log::Core::Info("      number: {}", bindingNumber);
+                Log::Core::Info(
+                    "      descriptor type: {}",
+                    vk::to_string(static_cast<vk::DescriptorType>(binding->descriptor_type)));
+                Log::Core::Info("      count: {}", binding->count);
 
                 if (globalBindings.contains(setNumber) &&
                     globalBindings.at(setNumber).contains(bindingNumber))
+                {
                     globalBindings.at(setNumber).at(bindingNumber).stageFlags |= config.stage;
+                    Log::Core::Info("        (duplicate)");
+                }
 
                 else
                 {
