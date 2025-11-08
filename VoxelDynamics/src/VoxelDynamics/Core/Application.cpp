@@ -4,6 +4,7 @@
 
 #include "VoxelDynamics/Core/Event.hpp"
 #include "VoxelDynamics/Core/EventBus.hpp"
+#include "VoxelDynamics/Core/Time.hpp"
 
 namespace VoxelDynamics
 {
@@ -48,6 +49,9 @@ Application::BuildInfo&& Application::initialize(BuildInfo&& buildInfo)
 
     if (!SDL_SetAppMetadata(buildInfo.name.c_str(), version.c_str(), buildInfo.identifier.c_str()))
         throw SDLException("Could not set application metadata");
+
+    // start the clock
+    Time::Init();
 
     return std::move(buildInfo);
 }

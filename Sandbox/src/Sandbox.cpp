@@ -4,7 +4,7 @@
 #include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/vector_float2.hpp"
 #include "glm/ext/vector_float3.hpp"
-// #include "glm/gtc/matrix_transform.hpp"
+#include "glm/gtc/matrix_transform.hpp"
 // #include "glm/trigonometric.hpp"
 
 // Sandbox App /////////////////////////////////////////////////////////////////////////////////////
@@ -15,37 +15,6 @@
 //         const auto& [width, height] = getWWindowSize();
 //         if (width != event.width || height != event.height)
 //             _context.requestResize();
-//     }
-
-//     void onUpdate(double /*deltaTime*/) override
-//     {
-//         UniformBufferObject ubo{};
-
-//         // rotate 90 degrees per second around z-axis
-//         ubo.model = glm::rotate(
-//             glm::mat4(1.0F),
-//             glm::radians(90.0F) * static_cast<float>(VoxelDynamics::Time::Seconds()),
-//             glm::vec3(0.0F, 0.0F, 1.0F));
-
-//         // look forward and down at origin with a 45 degree angle
-//         ubo.view = glm::lookAt(
-//             glm::vec3(2.0F, 2.0F, 2.0F), glm::vec3(0.0F, 0.0F, 0.0F), glm::vec3(0.0F,
-//             0.0F, 1.0F));
-
-//         // use perspective projection with 45 degree field of view
-//         const auto [width, height] = getWWindowSize();
-//         ubo.projection             = glm::perspective(
-//             glm::radians(45.0F),
-//             static_cast<float>(width) / static_cast<float>(height),
-//             0.1F,
-//             10.0F);
-
-//         // invert y-axis (for glm)
-//         ubo.projection[1][1] *= -1;
-
-//         _context.updateUniformBuffer(_frames, _uniformBuffer, ubo);
-//         _context.drawCurrentFrame(
-//             _window, _frames, _pipeline, _vertexBuffer, _indexBuffer, _uniformBuffer);
 //     }
 
 using namespace VoxelDynamics;
@@ -103,12 +72,23 @@ public:
 
     void onCreate() override
     {
-        // update uniform buffer
-        UniformBufferObject ubo{
-            .model = glm::mat4(1.0F), .view = glm::mat4(1.0F), .projection = glm::mat4(1.0F)};
+        // look forward and down at origin with a 45 degree angle
+        _ubo.view = glm::lookAt(
+            glm::vec3(2.0F, 2.0F, 2.0F), glm::vec3(0.0F, 0.0F, 0.0F), glm::vec3(0.0F, 0.0F, 1.0F));
 
-        for (const auto& uniformBufferMapped : _uniformBuffersMapped)
-            memcpy(uniformBufferMapped, &ubo, sizeof(ubo));
+        // use perspective projection with 45 degree field of view
+        const auto [width, height] = _window.getSize();
+        _ubo.projection            = glm::perspective(
+            glm::radians(45.0F),
+            static_cast<float>(width) / static_cast<float>(height),
+            0.1F,
+            10.0F);
+
+        // undo glm's y-axis inversion
+        _ubo.projection[1][1] *= -1;
+
+        // for (const auto& uniformBufferMapped : _uniformBuffersMapped)
+        //     memcpy(uniformBufferMapped, &_ubo, sizeof(_ubo));
 
         // configure descriptors
         for (const auto& [i, pair] : std::ranges::views::enumerate(
@@ -155,6 +135,16 @@ public:
 
     void onUpdate(double /*deltaTime*/) override
     {
+        // rotate 90 degrees per second around z-axis
+        _ubo.model = glm::rotate(
+            glm::mat4(1.0F),
+            glm::radians(90.0F) * static_cast<float>(Time::Seconds()),
+            glm::vec3(0.0F, 0.0F, 1.0F));
+
+        const auto& uniformBufferMapped =
+            _uniformBuffersMapped[_renderer.getSwapChain().currentFrame];
+        memcpy(uniformBufferMapped, &_ubo, sizeof(_ubo));
+
         _renderer.drawFrame(
             _window, *_graphicsPipeline, [&](const vk::raii::CommandBuffer& cmdBuffer) {
                 // bind vertex data
@@ -195,6 +185,8 @@ public:
     }
 
 private:
+    UniformBufferObject _ubo{};
+
     const Vulkan::Pipeline& _graphicsPipeline;
     Vulkan::Buffer _vertexBuffer;
     Vulkan::Buffer _indexBuffer;
@@ -236,17 +228,17 @@ private:
             nullptr); // pScissors (ignored)
 
         config.rasterizationState = vk::PipelineRasterizationStateCreateInfo(
-            {},                          // flags
-            vk::False,                   // depth clamp enabled
-            vk::False,                   // rasterizer discard enabled
-            vk::PolygonMode::eFill,      // polygon mode
-            vk::CullModeFlagBits::eBack, // cull mode
-            vk::FrontFace::eClockwise,   // front face
-            vk::False,                   // depth bias enabled
-            0.0F,                        // depth bias constant factor
-            0.0F,                        // depth bias clamp
-            1.0F,                        // depth bias slope factor
-            1.0F);                       // line width
+            {},                               // flags
+            vk::False,                        // depth clamp enabled
+            vk::False,                        // rasterizer discard enabled
+            vk::PolygonMode::eFill,           // polygon mode
+            vk::CullModeFlagBits::eBack,      // cull mode
+            vk::FrontFace::eCounterClockwise, // front face
+            vk::False,                        // depth bias enabled
+            0.0F,                             // depth bias constant factor
+            0.0F,                             // depth bias clamp
+            1.0F,                             // depth bias slope factor
+            1.0F);                            // line width
 
         config.multisampleState = vk::PipelineMultisampleStateCreateInfo(
             {},                          // flags
