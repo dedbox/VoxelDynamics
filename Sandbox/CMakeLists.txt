@@ -8,8 +8,8 @@ if(NOT SLANGC_EXECUTABLE)
   message(FATAL_ERROR "could not find slangc executable.")
 endif()
 
-set(SLANG_SOURCE_FILE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shader2.slang)
-set(SPIRV_OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/shaders/shader2.slang.spv)
+set(SLANG_SOURCE_FILE ${CMAKE_CURRENT_SOURCE_DIR}/shaders/shader3.slang)
+set(SPIRV_OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/shaders/shader3.slang.spv)
 
 add_custom_command(
   OUTPUT ${SPIRV_OUTPUT_FILE}

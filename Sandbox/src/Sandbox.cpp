@@ -26,11 +26,15 @@ struct Vertex
     }
 };
 
-struct UniformBufferObject
+struct CameraBufferData
 {
-    glm::mat4 model;
     glm::mat4 view;
     glm::mat4 projection;
+};
+
+struct ObjectBufferData
+{
+    glm::mat4 model;
 };
 
 class Sandbox : public Application
@@ -65,32 +69,41 @@ public:
     void onCreate() override
     {
         // look forward and down at origin with a 45 degree angle
-        _ubo.view = glm::lookAt(
+        _ubo_camera.view = glm::lookAt(
             glm::vec3(2.0F, 2.0F, 2.0F), glm::vec3(0.0F, 0.0F, 0.0F), glm::vec3(0.0F, 0.0F, 1.0F));
 
         // use perspective projection with 45 degree field of view
         const auto [width, height] = _window.getSize();
-        _ubo.projection            = glm::perspective(
+        _ubo_camera.projection     = glm::perspective(
             glm::radians(45.0F),
             static_cast<float>(width) / static_cast<float>(height),
             0.1F,
             10.0F);
 
         // undo glm's y-axis inversion
-        _ubo.projection[1][1] *= -1;
+        _ubo_camera.projection[1][1] *= -1;
 
-        // for (const auto& uniformBufferMapped : _uniformBuffersMapped)
-        //     memcpy(uniformBufferMapped, &_ubo, sizeof(_ubo));
+        for (const auto& bufferMapped : _uniformBuffersMapped[0])
+            memcpy(bufferMapped, &_ubo_camera, sizeof(_ubo_camera));
 
         // configure descriptors
         for (const auto& [i, pair] : std::ranges::views::enumerate(
-                 std::ranges::views::zip(_uniformBuffers, _descriptorSets)))
+                 std::ranges::views::zip(_uniformBuffers[0], _descriptorSets)))
         {
             const auto& [uniformBuffer, descriptorSet] = pair;
-            vk::DescriptorBufferInfo bufferInfo(*uniformBuffer, 0, sizeof(UniformBufferObject));
+            vk::DescriptorBufferInfo bufferInfo(*uniformBuffer, 0, sizeof(CameraBufferData));
             vk::WriteDescriptorSet descriptorWrite(
                 descriptorSet, 0, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo);
+            _context.getDevice()->updateDescriptorSets(descriptorWrite, {});
+        }
 
+        for (const auto& [i, pair] : std::ranges::views::enumerate(
+                 std::ranges::views::zip(_uniformBuffers[1], _descriptorSets)))
+        {
+            const auto& [uniformBuffer, descriptorSet] = pair;
+            vk::DescriptorBufferInfo bufferInfo(*uniformBuffer, 0, sizeof(ObjectBufferData));
+            vk::WriteDescriptorSet descriptorWrite(
+                descriptorSet, 1, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo);
             _context.getDevice()->updateDescriptorSets(descriptorWrite, {});
         }
 
@@ -136,14 +149,14 @@ public:
     void onUpdate(double /*deltaTime*/) override
     {
         // rotate 90 degrees per second around z-axis
-        _ubo.model = glm::rotate(
+        _ubo_object.model = glm::rotate(
             glm::mat4(1.0F),
             glm::radians(90.0F) * static_cast<float>(Time::Seconds()),
             glm::vec3(0.0F, 0.0F, 1.0F));
 
         const auto& uniformBufferMapped =
-            _uniformBuffersMapped[_renderer.getSwapChain().currentFrame];
-        memcpy(uniformBufferMapped, &_ubo, sizeof(_ubo));
+            _uniformBuffersMapped[1][_renderer.getSwapChain().currentFrame];
+        memcpy(uniformBufferMapped, &_ubo_object, sizeof(_ubo_object));
 
         _renderer.drawFrame(
             _window, *_graphicsPipeline, [&](const vk::raii::CommandBuffer& cmdBuffer) {
@@ -185,14 +198,15 @@ public:
     }
 
 private:
-    UniformBufferObject _ubo{};
+    CameraBufferData _ubo_camera{};
+    ObjectBufferData _ubo_object{};
 
     const Vulkan::Pipeline& _graphicsPipeline;
     Vulkan::Buffer _vertexBuffer;
     Vulkan::Buffer _indexBuffer;
 
-    std::vector<Vulkan::Buffer> _uniformBuffers;
-    std::vector<void*> _uniformBuffersMapped;
+    std::vector<std::vector<Vulkan::Buffer>> _uniformBuffers;
+    std::vector<std::vector<void*>> _uniformBuffersMapped;
 
     vk::raii::DescriptorPool _descriptorPool;
     std::vector<vk::raii::DescriptorSet> _descriptorSets;
@@ -200,9 +214,9 @@ private:
     const Vulkan::Pipeline& createGraphicsPipeline()
     {
         Vulkan::PipelineConfig config;
-        config.debugName = "Shader2 Pipeline";
+        config.debugName = "Shader3 Pipeline";
 
-        const auto spvCode = readFile("shaders/shader2.slang.spv");
+        const auto spvCode = readFile("shaders/shader3.slang.spv");
 
         config.modules = {
             {.spirvBytecode  = spvCode,
@@ -277,33 +291,62 @@ private:
             config, Vertex::getLocationOffset);
     }
 
-    std::vector<Vulkan::Buffer> createUniformBuffers() const
+    std::vector<std::vector<Vulkan::Buffer>> createUniformBuffers() const
     {
-        std::vector<Vulkan::Buffer> uniformBuffers;
-
+        std::vector<Vulkan::Buffer> cameraUniformBuffers;
         for (const auto i : std::ranges::views::iota(0U, buildInfo.renderer.maxFramesInFlight))
         {
             Vulkan::Buffer buffer = _context.createBuffer(
-                sizeof(UniformBufferObject),
+                sizeof(CameraBufferData),
                 vk::BufferUsageFlagBits::eUniformBuffer,
                 vk::MemoryPropertyFlagBits::eHostVisible |
                     vk::MemoryPropertyFlagBits::eHostCoherent,
-                "Uniform Buffer",
-                "Uniform Buffer Memory");
-            uniformBuffers.emplace_back(std::move(buffer));
+                "Camera Uniform Buffer",
+                "Camera Uniform Buffer Memory");
+            cameraUniformBuffers.emplace_back(std::move(buffer));
         }
 
-        return std::move(uniformBuffers);
+        std::vector<Vulkan::Buffer> objectUniformBuffers;
+        for (const auto i : std::ranges::views::iota(0U, buildInfo.renderer.maxFramesInFlight))
+        {
+            Vulkan::Buffer buffer = _context.createBuffer(
+                sizeof(ObjectBufferData),
+                vk::BufferUsageFlagBits::eUniformBuffer,
+                vk::MemoryPropertyFlagBits::eHostVisible |
+                    vk::MemoryPropertyFlagBits::eHostCoherent,
+                "Object Uniform Buffer",
+                "Object Uniform Buffer Memory");
+            objectUniformBuffers.emplace_back(std::move(buffer));
+        }
+
+        std::vector<std::vector<Vulkan::Buffer>> uniformBuffers;
+        uniformBuffers.reserve(2);
+
+        uniformBuffers.push_back(std::move(cameraUniformBuffers));
+        uniformBuffers.push_back(std::move(objectUniformBuffers));
+
+        return uniformBuffers;
     }
 
-    std::vector<void*> createUniformBuffersMaped() const
+    std::vector<std::vector<void*>> createUniformBuffersMaped() const
     {
-        std::vector<void*> uniformBuffersMapped;
-        uniformBuffersMapped.reserve(_uniformBuffers.size());
+        std::vector<void*> cameraBuffersMapped;
+        cameraBuffersMapped.reserve(_uniformBuffers[0].size());
 
-        for (const auto& buffer : _uniformBuffers)
-            uniformBuffersMapped.emplace_back(
-                buffer.memory.mapMemory(0, sizeof(UniformBufferObject)));
+        for (const auto& buffer : _uniformBuffers[0])
+            cameraBuffersMapped.emplace_back(buffer.memory.mapMemory(0, sizeof(CameraBufferData)));
+
+        std::vector<void*> objectBuffersMapped;
+        objectBuffersMapped.reserve(_uniformBuffers[1].size());
+
+        for (const auto& buffer : _uniformBuffers[1])
+            objectBuffersMapped.emplace_back(buffer.memory.mapMemory(0, sizeof(ObjectBufferData)));
+
+        std::vector<std::vector<void*>> uniformBuffersMapped;
+        uniformBuffersMapped.reserve(2);
+
+        uniformBuffersMapped.push_back(cameraBuffersMapped);
+        uniformBuffersMapped.push_back(objectBuffersMapped);
 
         return uniformBuffersMapped;
     }
@@ -311,14 +354,18 @@ private:
     vk::raii::DescriptorPool createDescriptorPool() const
     {
         vk::DescriptorPoolSize poolSize(
-            vk::DescriptorType::eUniformBuffer, buildInfo.renderer.maxFramesInFlight);
+            vk::DescriptorType::eUniformBuffer, 2 * buildInfo.renderer.maxFramesInFlight);
 
         vk::DescriptorPoolCreateInfo poolInfo(
             vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
             buildInfo.renderer.maxFramesInFlight,
             poolSize);
 
-        return vk::raii::DescriptorPool(*_context.getDevice(), poolInfo);
+        vk::raii::DescriptorPool pool(*_context.getDevice(), poolInfo);
+
+        _context.setDebugName(vk::ObjectType::eDescriptorPool, &**pool, "Descriptor Pool");
+
+        return pool;
     }
 
     std::vector<vk::raii::DescriptorSet> createDescriptorSets() const
@@ -326,7 +373,17 @@ private:
         std::vector<vk::DescriptorSetLayout> layouts(
             buildInfo.renderer.maxFramesInFlight, *_graphicsPipeline.descriptorSetLayouts[0]);
         vk::DescriptorSetAllocateInfo allocInfo(*_descriptorPool, layouts);
-        return _context.getDevice()->allocateDescriptorSets(allocInfo);
+
+        std::vector<vk::raii::DescriptorSet> descriptorSets =
+            _context.getDevice()->allocateDescriptorSets(allocInfo);
+
+        for (const auto& [i, descriptorSet] : std::ranges::views::enumerate(descriptorSets))
+            _context.setDebugName(
+                vk::ObjectType::eDescriptorSet,
+                &**descriptorSet,
+                std::format("Descriptor Set {}", i));
+
+        return descriptorSets;
     }
 };
 
