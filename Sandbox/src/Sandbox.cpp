@@ -9,14 +9,6 @@
 
 // Sandbox App /////////////////////////////////////////////////////////////////////////////////////
 
-//     void onResize(const Event::WindowResuze& event)
-//     {
-//         Log::Info("Window resize event: {}x{}", event.width, event.height);
-//         const auto& [width, height] = getWWindowSize();
-//         if (width != event.width || height != event.height)
-//             _context.requestResize();
-//     }
-
 using namespace VoxelDynamics;
 
 struct Vertex
@@ -104,7 +96,7 @@ public:
 
         // connect event listeners
         Event::Bus::Connect<Event::WindowClose, &Sandbox::onClose>(this);
-        // Event::Bus::Connect<Event::WindowResuze, &SandboxApp::onResize>(this);
+        Event::Bus::Connect<Event::WindowResuze, &Sandbox::onResize>(this);
         Event::Bus::Connect<Event::KeyDown, &Sandbox::onKeyDown>(this);
 
         // unhide the window
@@ -112,6 +104,14 @@ public:
     }
 
     void onClose() { quit(); }
+
+    void onResize(const Event::WindowResuze& event)
+    {
+        Log::Info("Window resize event: {}x{}", event.width, event.height);
+        const auto& [width, height] = _window.getSize();
+        if (width != event.width || height != event.height)
+            _renderer.requestResize();
+    }
 
     void onKeyDown(const Event::KeyDown& event)
     {
