@@ -7,6 +7,7 @@
 #include "VoxelDynamics/Vulkan/Device.hpp"
 #include "VoxelDynamics/Vulkan/Instance.hpp"
 #include "VoxelDynamics/Vulkan/PhysicalDevice.hpp"
+#include "VoxelDynamics/Vulkan/UniformBuffer.hpp"
 
 namespace VoxelDynamics::Vulkan
 {
@@ -52,6 +53,8 @@ public:
         vk::MemoryPropertyFlags properties,
         const std::string& bufferName,
         const std::string& memoryName) const;
+
+    UniformBuffer createUniformBuffer(vk::DeviceSize size, const std::string& debugName) const;
 
     void setDebugName(vk::ObjectType type, void* handle, const std::string& name) const;
 

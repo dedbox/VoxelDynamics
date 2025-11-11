@@ -15,3 +15,4 @@
 #include <VoxelDynamics/Vulkan/PipelineManager.hpp>
 #include <VoxelDynamics/Vulkan/RenderQueue.hpp>
 #include <VoxelDynamics/Vulkan/Renderer.hpp>
+#include <VoxelDynamics/Vulkan/UniformBuffer.hpp>

@@ -60,7 +60,6 @@ public:
         , _indexBuffer(
               _renderer.transferIndexData(_indices.data(), _indices.size() * sizeof(uint16_t)))
         , _uniformBuffers(createUniformBuffers())
-        , _uniformBuffersMapped(createUniformBuffersMaped())
         , _descriptorPool(createDescriptorPool())
         , _descriptorSets(createDescriptorSets())
     {
@@ -68,6 +67,8 @@ public:
 
     void onCreate() override
     {
+        const auto& device = _context.getDevice();
+
         // look forward and down at origin with a 45 degree angle
         _ubo_camera.view = glm::lookAt(
             glm::vec3(2.0F, 2.0F, 2.0F), glm::vec3(0.0F, 0.0F, 0.0F), glm::vec3(0.0F, 0.0F, 1.0F));
@@ -83,28 +84,23 @@ public:
         // undo glm's y-axis inversion
         _ubo_camera.projection[1][1] *= -1;
 
-        for (const auto& bufferMapped : _uniformBuffersMapped[0])
-            memcpy(bufferMapped, &_ubo_camera, sizeof(_ubo_camera));
+        // update camera uniform buffer
+        for (const auto& buffers : _uniformBuffers)
+            memcpy(buffers[0].mapped, &_ubo_camera, buffers[0].size);
 
         // configure descriptors
-        for (const auto& [i, pair] : std::ranges::views::enumerate(
-                 std::ranges::views::zip(_uniformBuffers[0], _descriptorSets)))
+        for (const auto& [i, buffers, descriptorSet] :
+             std::ranges::views::zip(std::ranges::views::iota(0), _uniformBuffers, _descriptorSets))
         {
-            const auto& [uniformBuffer, descriptorSet] = pair;
-            vk::DescriptorBufferInfo bufferInfo(*uniformBuffer, 0, sizeof(CameraBufferData));
-            vk::WriteDescriptorSet descriptorWrite(
-                descriptorSet, 0, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo);
-            _context.getDevice()->updateDescriptorSets(descriptorWrite, {});
-        }
+            vk::DescriptorBufferInfo bufferInfo0(**buffers[0], 0, sizeof(CameraBufferData));
+            vk::WriteDescriptorSet descriptorWrite0(
+                descriptorSet, 0, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo0);
+            device->updateDescriptorSets(descriptorWrite0, {});
 
-        for (const auto& [i, pair] : std::ranges::views::enumerate(
-                 std::ranges::views::zip(_uniformBuffers[1], _descriptorSets)))
-        {
-            const auto& [uniformBuffer, descriptorSet] = pair;
-            vk::DescriptorBufferInfo bufferInfo(*uniformBuffer, 0, sizeof(ObjectBufferData));
-            vk::WriteDescriptorSet descriptorWrite(
-                descriptorSet, 1, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo);
-            _context.getDevice()->updateDescriptorSets(descriptorWrite, {});
+            vk::DescriptorBufferInfo bufferInfo1(**buffers[1], 0, sizeof(ObjectBufferData));
+            vk::WriteDescriptorSet descriptorWrite1(
+                descriptorSet, 1, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo1);
+            device->updateDescriptorSets(descriptorWrite1, {});
         }
 
         // connect event listeners
@@ -148,15 +144,18 @@ public:
 
     void onUpdate(double /*deltaTime*/) override
     {
+        const auto currentFrame    = _renderer.getSwapChain().currentFrame;
+        const auto& uniformBuffers = _uniformBuffers[currentFrame];
+        const auto& descriptorSets = _descriptorSets[currentFrame];
+
         // rotate 90 degrees per second around z-axis
         _ubo_object.model = glm::rotate(
             glm::mat4(1.0F),
             glm::radians(90.0F) * static_cast<float>(Time::Seconds()),
             glm::vec3(0.0F, 0.0F, 1.0F));
 
-        const auto& uniformBufferMapped =
-            _uniformBuffersMapped[1][_renderer.getSwapChain().currentFrame];
-        memcpy(uniformBufferMapped, &_ubo_object, sizeof(_ubo_object));
+        // update object uniform buffer
+        memcpy(uniformBuffers[1].mapped, &_ubo_object, sizeof(_ubo_object));
 
         _renderer.drawFrame(
             _window, *_graphicsPipeline, [&](const vk::raii::CommandBuffer& cmdBuffer) {
@@ -174,11 +173,11 @@ public:
 
                 // bind uniform data
                 cmdBuffer.bindDescriptorSets(
-                    vk::PipelineBindPoint::eGraphics,                        // pipeline bind point
-                    *_graphicsPipeline.pipelineLayout,                       // pipeline layout
-                    0,                                                       // first set
-                    *_descriptorSets[_renderer.getSwapChain().currentFrame], // descriptor sets
-                    nullptr);                                                // dynamic offsets
+                    vk::PipelineBindPoint::eGraphics,  // pipeline bind point
+                    *_graphicsPipeline.pipelineLayout, // pipeline layout
+                    0,                                 // first set
+                    *descriptorSets,                   // descriptor sets
+                    nullptr);                          // dynamic offsets
 
                 // issue indexed draw command
                 cmdBuffer.drawIndexed(
@@ -205,8 +204,7 @@ private:
     Vulkan::Buffer _vertexBuffer;
     Vulkan::Buffer _indexBuffer;
 
-    std::vector<std::vector<Vulkan::Buffer>> _uniformBuffers;
-    std::vector<std::vector<void*>> _uniformBuffersMapped;
+    std::vector<std::vector<Vulkan::UniformBuffer>> _uniformBuffers;
 
     vk::raii::DescriptorPool _descriptorPool;
     std::vector<vk::raii::DescriptorSet> _descriptorSets;
@@ -291,64 +289,22 @@ private:
             config, Vertex::getLocationOffset);
     }
 
-    std::vector<std::vector<Vulkan::Buffer>> createUniformBuffers() const
+    std::vector<std::vector<Vulkan::UniformBuffer>> createUniformBuffers() const
     {
-        std::vector<Vulkan::Buffer> cameraUniformBuffers;
+        std::vector<std::vector<Vulkan::UniformBuffer>> uniformBuffers;
+        uniformBuffers.reserve(buildInfo.renderer.maxFramesInFlight);
+
         for (const auto i : std::ranges::views::iota(0U, buildInfo.renderer.maxFramesInFlight))
         {
-            Vulkan::Buffer buffer = _context.createBuffer(
-                sizeof(CameraBufferData),
-                vk::BufferUsageFlagBits::eUniformBuffer,
-                vk::MemoryPropertyFlagBits::eHostVisible |
-                    vk::MemoryPropertyFlagBits::eHostCoherent,
-                "Camera Uniform Buffer",
-                "Camera Uniform Buffer Memory");
-            cameraUniformBuffers.emplace_back(std::move(buffer));
+            std::vector<Vulkan::UniformBuffer> buffers;
+            buffers.push_back(
+                _context.createUniformBuffer(sizeof(CameraBufferData), "Camera Uniform Buffer"));
+            buffers.push_back(
+                _context.createUniformBuffer(sizeof(ObjectBufferData), "Object Uniform Buffer"));
+            uniformBuffers.push_back(std::move(buffers));
         }
-
-        std::vector<Vulkan::Buffer> objectUniformBuffers;
-        for (const auto i : std::ranges::views::iota(0U, buildInfo.renderer.maxFramesInFlight))
-        {
-            Vulkan::Buffer buffer = _context.createBuffer(
-                sizeof(ObjectBufferData),
-                vk::BufferUsageFlagBits::eUniformBuffer,
-                vk::MemoryPropertyFlagBits::eHostVisible |
-                    vk::MemoryPropertyFlagBits::eHostCoherent,
-                "Object Uniform Buffer",
-                "Object Uniform Buffer Memory");
-            objectUniformBuffers.emplace_back(std::move(buffer));
-        }
-
-        std::vector<std::vector<Vulkan::Buffer>> uniformBuffers;
-        uniformBuffers.reserve(2);
-
-        uniformBuffers.push_back(std::move(cameraUniformBuffers));
-        uniformBuffers.push_back(std::move(objectUniformBuffers));
 
         return uniformBuffers;
-    }
-
-    std::vector<std::vector<void*>> createUniformBuffersMaped() const
-    {
-        std::vector<void*> cameraBuffersMapped;
-        cameraBuffersMapped.reserve(_uniformBuffers[0].size());
-
-        for (const auto& buffer : _uniformBuffers[0])
-            cameraBuffersMapped.emplace_back(buffer.memory.mapMemory(0, sizeof(CameraBufferData)));
-
-        std::vector<void*> objectBuffersMapped;
-        objectBuffersMapped.reserve(_uniformBuffers[1].size());
-
-        for (const auto& buffer : _uniformBuffers[1])
-            objectBuffersMapped.emplace_back(buffer.memory.mapMemory(0, sizeof(ObjectBufferData)));
-
-        std::vector<std::vector<void*>> uniformBuffersMapped;
-        uniformBuffersMapped.reserve(2);
-
-        uniformBuffersMapped.push_back(cameraBuffersMapped);
-        uniformBuffersMapped.push_back(objectBuffersMapped);
-
-        return uniformBuffersMapped;
     }
 
     vk::raii::DescriptorPool createDescriptorPool() const

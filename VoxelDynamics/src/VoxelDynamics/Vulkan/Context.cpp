@@ -212,6 +212,20 @@ uint32_t Context::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags pr
     throw std::runtime_error("Could not find a suitable memory type");
 }
 
+UniformBuffer Context::createUniformBuffer(vk::DeviceSize size, const std::string& debugName) const
+{
+    Buffer buffer = createBuffer(
+        size,
+        vk::BufferUsageFlagBits::eUniformBuffer,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+        debugName,
+        std::format("{} Memory", debugName));
+
+    void* mapped = buffer.memory.mapMemory(0, size);
+
+    return UniformBuffer(size, std::move(buffer), mapped);
+}
+
 std::string Context::SurfaceFormatName(const vk::SurfaceFormatKHR& format)
 {
     return vk::to_string(format.format) + " / " + vk::to_string(format.colorSpace);
