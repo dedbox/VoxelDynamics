@@ -86,7 +86,7 @@ public:
 
         // update camera uniform buffer
         for (const auto& buffers : _uniformBuffers)
-            memcpy(buffers[0].mapped, &_ubo_camera, buffers[0].size);
+            buffers[0].update(&_ubo_camera);
 
         // configure descriptors
         for (const auto& [i, buffers, descriptorSet] :
@@ -155,7 +155,7 @@ public:
             glm::vec3(0.0F, 0.0F, 1.0F));
 
         // update object uniform buffer
-        memcpy(uniformBuffers[1].mapped, &_ubo_object, sizeof(_ubo_object));
+        uniformBuffers[1].update(&_ubo_object);
 
         _renderer.drawFrame(
             _window, *_graphicsPipeline, [&](const vk::raii::CommandBuffer& cmdBuffer) {

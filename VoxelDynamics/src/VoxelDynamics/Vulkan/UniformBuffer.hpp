@@ -15,6 +15,8 @@ public:
     // proxy dereference operator
     Buffer& operator*() { return buffer; }
     const Buffer& operator*() const { return buffer; }
+
+    void update(const void* data) const { memcpy(mapped, data, size); }
 };
 
 } // namespace VoxelDynamics::Vulkan
