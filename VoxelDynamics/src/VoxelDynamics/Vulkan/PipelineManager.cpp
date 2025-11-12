@@ -1,4 +1,8 @@
+#include "vulkan/vulkan_enums.hpp"
+
 #include "VoxelDynamics/Vulkan/PipelineManager.hpp"
+
+#include "VoxelDynamics/Core/Util.hpp"
 
 namespace VoxelDynamics::Vulkan
 {
@@ -151,8 +155,6 @@ PipelineManager::loadShaderModuleConfigs(
         if (entryPoint == nullptr)
             throw std::runtime_error("Could not find SPIR-V shader module entry point");
 
-        LogEntryPoint(debugName, config, entryPoint);
-
         entryPoints.push_back(entryPoint);
     }
 
@@ -260,8 +262,6 @@ std::vector<vk::raii::DescriptorSetLayout> PipelineManager::generateDescriptorSe
     const std::vector<const SpvReflectEntryPoint*>& entryPoints,
     const std::string& debugName) const
 {
-    Log::Core::Info("Generating descriptor set layouts");
-
     std::map<uint32_t, std::map<uint32_t, vk::DescriptorSetLayoutBinding>> globalBindings;
 
     for (const auto& [i, pair] :
@@ -274,38 +274,28 @@ std::vector<vk::raii::DescriptorSetLayout> PipelineManager::generateDescriptorSe
             entryPoint->descriptor_sets, entryPoint->descriptor_set_count);
 
         Log::Core::Info(
-            "Entry point {} ({}) has {} descriptor sets:",
+            "Entry point {} ({}) has {} descriptor set{}{}",
             entryPoint->name,
             vk::to_string(config.stage),
-            descriptorSets.size());
+            descriptorSets.size(),
+            orstr(descriptorSets.size()),
+            orstr(descriptorSets.size(), 0, "", ":"));
 
         for (const auto& [j, descriptorSet] : std::ranges::views::enumerate(descriptorSets))
         {
+            LogDescriptorSet("  ", descriptorSet);
+
             const auto setNumber = descriptorSet.set;
             const auto bindings  = std::span<SpvReflectDescriptorBinding*>(
                 descriptorSet.bindings, descriptorSet.binding_count);
-
-            Log::Core::Info(
-                "  descriptor set {} ({}) has {} bindings:", j, setNumber, bindings.size());
 
             for (const auto& [k, binding] : std::ranges::views::enumerate(bindings))
             {
                 uint32_t bindingNumber = binding->binding;
 
-                Log::Core::Info("    binding {}:", k);
-                Log::Core::Info("      number: {}", bindingNumber);
-                Log::Core::Info(
-                    "      descriptor type: {}",
-                    vk::to_string(static_cast<vk::DescriptorType>(binding->descriptor_type)));
-                Log::Core::Info("      count: {}", binding->count);
-
                 if (globalBindings.contains(setNumber) &&
                     globalBindings.at(setNumber).contains(bindingNumber))
-                {
                     globalBindings.at(setNumber).at(bindingNumber).stageFlags |= config.stage;
-                    Log::Core::Info("        (duplicate)");
-                }
-
                 else
                 {
                     vk::DescriptorSetLayoutBinding new_binding(
@@ -379,76 +369,67 @@ std::vector<vk::PushConstantRange> PipelineManager::generatePushConstantRanges(
     return pushConstantRanges;
 }
 
-void PipelineManager::LogEntryPoint(
-    const std::string& debugName,
-    const ShaderModuleConfig& config,
-    const SpvReflectEntryPoint* entryPoint)
+void PipelineManager::LogDescriptorSet(
+    const std::string& prefix, const SpvReflectDescriptorSet& set)
 {
-    Log::Core::Info("Reflecting SPIR-V shader ({})", debugName);
-    Log::Core::Info("  stage: {}", vk::to_string(config.stage));
-    Log::Core::Info("  entry point: {}", config.entryPointName);
+    const auto setNumber = set.set;
+    const auto bindings  = std::span<SpvReflectDescriptorBinding*>(set.bindings, set.binding_count);
 
-    const auto descriptorSets = std::span<SpvReflectDescriptorSet>(
-        entryPoint->descriptor_sets, entryPoint->descriptor_set_count);
-
-    Log::Core::Info(
-        "{} > {} has {} descriptor set{}{}",
-        debugName,
-        config.entryPointName,
-        descriptorSets.size(),
-        descriptorSets.size() == 1 ? "" : "s",
-        descriptorSets.size() == 0 ? "" : ":");
-
-    for (const auto& [i, descriptorSet] : std::ranges::views::enumerate(descriptorSets))
+    for (const auto& binding : bindings)
     {
-        std::span<SpvReflectDescriptorBinding*> bindings(
-            descriptorSet.bindings, descriptorSet.binding_count);
-
+        Log::Core::Info("{}set {}, binding {}:", prefix, setNumber, binding->binding);
+        Log::Core::Info("{}  name: {}", prefix, binding->name);
         Log::Core::Info(
-            "  set {} has {} binding{}{}",
-            i,
-            bindings.size(),
-            bindings.size() == 1 ? "" : "s",
-            bindings.size() == 0 ? "" : ":");
+            "{}  descriptor type: {}",
+            prefix,
+            vk::to_string(static_cast<vk::DescriptorType>(binding->descriptor_type)));
 
-        for (const auto& [j, binding] : std::ranges::views::enumerate(bindings))
+        if (binding->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
+            binding->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER)
         {
             Log::Core::Info(
-                "    binding {} is a{}:", binding->binding, toString(binding->descriptor_type));
+                "{}  size: {} byte{}{}",
+                prefix,
+                binding->block.size,
+                orstr(binding->block.size),
+                binding->block.size == binding->block.padded_size
+                    ? ""
+                    : std::format(" ({} padded)", binding->block.padded_size));
 
-            if (binding->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER ||
-                binding->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+            Log::Core::Info("{}  descriptor count: {}", prefix, binding->count);
+
+            std::span<SpvReflectBlockVariable> members(
+                binding->block.members, binding->block.member_count);
+
+            for (const auto& [i, member] : std::ranges::views::enumerate(members))
             {
-                Log::Core::Info("      name: {}", binding->block.name);
-                Log::Core::Info("      size: {} bytes", binding->block.size);
-                Log::Core::Info("      padded size: {} bytes", binding->block.padded_size);
-                Log::Core::Info("      member count: {}", binding->block.member_count);
+                Log::Core::Info("{}  member {}:", prefix, i);
+                Log::Core::Info("{}    name: {}", prefix, member.name);
+                Log::Core::Info("{}    type: {}", prefix, member.type_description->type_name);
+                Log::Core::Info(
+                    "{}    offset: {} byte{}", prefix, member.offset, orstr(member.offset));
+                Log::Core::Info(
+                    "{}    size: {} byte{}{}",
+                    prefix,
+                    member.size,
+                    orstr(member.size),
+                    member.size == member.padded_size
+                        ? ""
+                        : std::format(" ({} padded)", member.padded_size));
 
-                std::span<SpvReflectBlockVariable> members(
-                    binding->block.members, binding->block.member_count);
-
-                for (const auto& [i, member] : std::ranges::views::enumerate(members))
-                {
-                    Log::Core::Info("      member {}:", i);
-                    Log::Core::Info("        name: {}", member.name);
-                    Log::Core::Info("        type: {}", member.type_description->type_name);
-                    Log::Core::Info("        byte offset: {}", member.offset);
-                    Log::Core::Info("        size: {} bytes", member.size);
-
-                    if (member.type_description->op == SpvOpTypeArray ||
-                        member.type_description->op == SpvOpTypeRuntimeArray)
-                        Log::Core::Info("        dimensions: {}", arrayDimensions(member.array));
-                }
+                if (member.type_description->op == SpvOpTypeArray ||
+                    member.type_description->op == SpvOpTypeRuntimeArray)
+                    Log::Core::Info("{}    dimensions: {}", prefix, arrayDimensions(member.array));
             }
+        }
 
-            else if (binding->count == 0)
-                Log::Core::Info("      array type: runtime", binding->binding, binding->name);
+        else if (binding->count == 0)
+            Log::Core::Info("{}  runtime array", prefix);
 
-            else
-            {
-                Log::Core::Info("      array type: static");
-                Log::Core::Info("      dimensions: {}", arrayDimensions(binding->array));
-            }
+        else
+        {
+            Log::Core::Info("{}  static array:", prefix);
+            Log::Core::Info("{}    dimensions: {}", prefix, arrayDimensions(binding->array));
         }
     }
 }
@@ -467,28 +448,6 @@ void PipelineManager::LogPushConstants(
 
     for (const auto& [i, block] : std::ranges::views::enumerate(blocks))
         Log::Core::Info("  block {}: offset = {}, size = {}", i, block->offset, block->size);
-}
-
-std::string PipelineManager::toString(SpvReflectDescriptorType type)
-{
-    // clang-format off
-    switch (type)
-    {
-    case SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER:                    return " sampler";
-    case SPV_REFLECT_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:     return " combined image sampler";
-    case SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLED_IMAGE:              return " sampled image";
-    case SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_IMAGE:              return " storage image";
-    case SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:       return " uniform texel buffer";
-    case SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:       return " storage texel buffer";
-    case SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER:             return " uniform buffer";
-    case SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER:             return " uniform storage buffer";
-    case SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:     return " dynamic uniform buffer";
-    case SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:     return " dynamic storage buffer";
-    case SPV_REFLECT_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:           return "n input attachment";
-    case SPV_REFLECT_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: return "n acceleration structure";
-    }
-    // clang-format on
-    std::unreachable();
 }
 
 std::string PipelineManager::arrayDimensions(SpvReflectArrayTraits& array)
