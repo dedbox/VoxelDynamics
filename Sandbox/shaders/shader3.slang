@@ -1,3 +1,20 @@
+struct CameraBufferData
+{
+    float4x4 view;
+    float4x4 projection;
+};
+
+[[vk::binding(0, 0)]]
+ConstantBuffer<CameraBufferData> gCam : register(b0, space0);
+
+struct ObjectBufferData
+{
+    float4x4 model;
+};
+
+[[vk::binding(0, 2)]]
+ConstantBuffer<ObjectBufferData> gObj : register(b0, space2);
+
 struct VertexIn
 {
     float2 inPosition;
@@ -10,26 +27,11 @@ struct VertexOut
     float3 color;
 };
 
-struct CameraBufferData
-{
-    float4x4 view;
-    float4x4 projection;
-};
-
-struct ObjectBufferData
-{
-    float4x4 model;
-};
-
 [shader("vertex")]
-VertexOut vertMain(VertexIn input,
-                   ConstantBuffer<CameraBufferData> ubo_camera,
-                   ConstantBuffer<ObjectBufferData> ubo_object)
+VertexOut vertMain(VertexIn input)
 {
     VertexOut output;
-    output.position = mul(ubo_camera.projection,
-                          mul(ubo_camera.view,
-                              mul(ubo_object.model, float4(input.inPosition, 0.0, 1.0))));
+    output.position = mul(gCam.projection, mul(gCam.view, mul(gObj.model, float4(input.inPosition, 0.0, 1.0))));
     output.color = input.inColor;
     return output;
 }
