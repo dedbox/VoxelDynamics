@@ -18,4 +18,9 @@ std::vector<char> readFile(const std::string& fileName)
     return buffer;
 }
 
+std::string orstr(size_t n, size_t m, const std::string& str1, const std::string& str2)
+{
+    return n == m ? str1 : str2;
+}
+
 } // namespace VoxelDynamics
