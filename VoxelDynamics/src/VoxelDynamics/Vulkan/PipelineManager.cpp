@@ -263,6 +263,7 @@ std::vector<vk::raii::DescriptorSetLayout> PipelineManager::generateDescriptorSe
     const std::string& debugName) const
 {
     std::map<uint32_t, std::map<uint32_t, vk::DescriptorSetLayoutBinding>> globalBindings;
+    uint32_t maxSetNumber{};
 
     for (const auto& [i, pair] :
          std::ranges::views::enumerate(std::ranges::views::zip(shaderModuleConfigs, entryPoints)))
@@ -289,6 +290,9 @@ std::vector<vk::raii::DescriptorSetLayout> PipelineManager::generateDescriptorSe
             const auto bindings  = std::span<SpvReflectDescriptorBinding*>(
                 descriptorSet.bindings, descriptorSet.binding_count);
 
+            if (setNumber > maxSetNumber)
+                maxSetNumber = setNumber;
+
             for (const auto& [k, binding] : std::ranges::views::enumerate(bindings))
             {
                 uint32_t bindingNumber = binding->binding;
@@ -312,22 +316,41 @@ std::vector<vk::raii::DescriptorSetLayout> PipelineManager::generateDescriptorSe
 
     // create descriptor set layouts
     std::vector<vk::raii::DescriptorSetLayout> descriptorSetLayouts;
-    for (const auto& [i, pair] : std::ranges::views::enumerate(globalBindings))
+    for (const auto setNumber : std::ranges::views::iota(0U, maxSetNumber))
     {
-        const auto& [setNumber, setBindings] = pair;
+        // descriptor set IS defined in the shader source
+        if (globalBindings.contains(setNumber))
+        {
+            const auto& setBindings = globalBindings.at(setNumber);
 
-        std::vector<vk::DescriptorSetLayoutBinding> bindings;
-        for (const auto& [bindingNumber, binding] : setBindings)
-            bindings.push_back(binding);
+            std::vector<vk::DescriptorSetLayoutBinding> bindings;
+            for (const auto& [bindingNumber, binding] : setBindings)
+                bindings.push_back(binding);
 
-        vk::DescriptorSetLayoutCreateInfo layoutInfo({}, bindings);
-        descriptorSetLayouts.emplace_back(
-            _context->getDevice()->createDescriptorSetLayout(layoutInfo));
+            vk::DescriptorSetLayoutCreateInfo layoutInfo({}, bindings);
 
-        _context->setDebugName(
-            vk::ObjectType::eDescriptorSetLayout,
-            &**descriptorSetLayouts.back(),
-            std::format("{} Descriptor Set Layout {}", debugName, i));
+            descriptorSetLayouts.emplace_back(
+                _context->getDevice()->createDescriptorSetLayout(layoutInfo));
+
+            _context->setDebugName(
+                vk::ObjectType::eDescriptorSetLayout,
+                &**descriptorSetLayouts.back(),
+                std::format("{} Descriptor Set Layout {}", debugName, setNumber));
+        }
+
+        // descriptor set IS NOT defined in the shader source
+        else
+        {
+            vk::DescriptorSetLayoutCreateInfo layoutInfo({}, 0, nullptr);
+
+            descriptorSetLayouts.emplace_back(
+                _context->getDevice()->createDescriptorSetLayout(layoutInfo));
+
+            _context->setDebugName(
+                vk::ObjectType::eDescriptorSetLayout,
+                &**descriptorSetLayouts.back(),
+                std::format("{} Descriptor Set Layout {}", debugName, setNumber));
+        }
     }
 
     return descriptorSetLayouts;

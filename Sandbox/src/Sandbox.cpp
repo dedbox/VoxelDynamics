@@ -1,6 +1,5 @@
 #include <VoxelDynamics.hpp>
 
-// #include "VoxelDynamics/Core/Time.hpp"
 #include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/vector_float2.hpp"
 #include "glm/ext/vector_float3.hpp"
@@ -86,21 +85,26 @@ public:
 
         // update camera uniform buffer
         for (const auto& buffers : _uniformBuffers)
-            buffers[0].update(&_ubo_camera);
+            buffers[0]->update(&_ubo_camera);
 
-        // configure descriptors
-        for (const auto& [i, buffers, descriptorSet] :
-             std::ranges::views::zip(std::ranges::views::iota(0), _uniformBuffers, _descriptorSets))
+        // configure descriptor set updates
+        for (const auto& [uniformBuffers, descriptorSets] :
+             std::ranges::views::zip(_uniformBuffers, _descriptorSets))
         {
-            vk::DescriptorBufferInfo bufferInfo0(**buffers[0], 0, sizeof(CameraBufferData));
+            vk::DescriptorBufferInfo bufferInfo0(***uniformBuffers[0], 0, sizeof(CameraBufferData));
             vk::WriteDescriptorSet descriptorWrite0(
-                descriptorSet, 0, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo0);
+                descriptorSets[0], 0, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo0);
             device->updateDescriptorSets(descriptorWrite0, {});
 
-            vk::DescriptorBufferInfo bufferInfo1(**buffers[1], 0, sizeof(ObjectBufferData));
+            vk::DescriptorBufferInfo bufferInfo1(***uniformBuffers[1], 0, 0);
             vk::WriteDescriptorSet descriptorWrite1(
-                descriptorSet, 1, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo1);
+                descriptorSets[1], 1, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo0);
             device->updateDescriptorSets(descriptorWrite1, {});
+
+            vk::DescriptorBufferInfo bufferInfo2(***uniformBuffers[2], 0, sizeof(ObjectBufferData));
+            vk::WriteDescriptorSet descriptorWrite2(
+                descriptorSets[2], 2, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo1);
+            device->updateDescriptorSets(descriptorWrite2, {});
         }
 
         // connect event listeners
@@ -155,7 +159,7 @@ public:
             glm::vec3(0.0F, 0.0F, 1.0F));
 
         // update object uniform buffer
-        uniformBuffers[1].update(&_ubo_object);
+        uniformBuffers[2]->update(&_ubo_object);
 
         _renderer.drawFrame(
             _window, *_graphicsPipeline, [&](const vk::raii::CommandBuffer& cmdBuffer) {
@@ -176,7 +180,7 @@ public:
                     vk::PipelineBindPoint::eGraphics,  // pipeline bind point
                     *_graphicsPipeline.pipelineLayout, // pipeline layout
                     0,                                 // first set
-                    *descriptorSets,                   // descriptor sets
+                    *descriptorSets[currentFrame],     // descriptor sets
                     nullptr);                          // dynamic offsets
 
                 // issue indexed draw command
@@ -204,10 +208,10 @@ private:
     Vulkan::Buffer _vertexBuffer;
     Vulkan::Buffer _indexBuffer;
 
-    std::vector<std::vector<Vulkan::UniformBuffer>> _uniformBuffers;
+    std::vector<std::vector<std::optional<Vulkan::UniformBuffer>>> _uniformBuffers;
 
     vk::raii::DescriptorPool _descriptorPool;
-    std::vector<vk::raii::DescriptorSet> _descriptorSets;
+    std::vector<std::vector<vk::raii::DescriptorSet>> _descriptorSets;
 
     const Vulkan::Pipeline& createGraphicsPipeline()
     {
@@ -289,19 +293,19 @@ private:
             config, Vertex::getLocationOffset);
     }
 
-    std::vector<std::vector<Vulkan::UniformBuffer>> createUniformBuffers() const
+    std::vector<std::vector<std::optional<Vulkan::UniformBuffer>>> createUniformBuffers() const
     {
-        std::vector<std::vector<Vulkan::UniformBuffer>> uniformBuffers;
+        // create one set of uniform buffers per frame
+        std::vector<std::vector<std::optional<Vulkan::UniformBuffer>>> uniformBuffers;
         uniformBuffers.reserve(buildInfo.renderer.maxFramesInFlight);
 
         for (const auto i : std::ranges::views::iota(0U, buildInfo.renderer.maxFramesInFlight))
         {
-            std::vector<Vulkan::UniformBuffer> buffers;
-            buffers.push_back(
-                _context.createUniformBuffer(sizeof(CameraBufferData), "Camera Uniform Buffer"));
-            buffers.push_back(
-                _context.createUniformBuffer(sizeof(ObjectBufferData), "Object Uniform Buffer"));
-            uniformBuffers.push_back(std::move(buffers));
+            uniformBuffers[i].emplace_back(_context.createUniformBuffer(
+                sizeof(CameraBufferData), std::format("Camera Uniform Buffer (Frame {})", i)));
+            uniformBuffers[i].emplace_back(std::nullopt);
+            uniformBuffers[i].emplace_back(_context.createUniformBuffer(
+                sizeof(ObjectBufferData), std::format("Object Uniform Buffer (Frame {})", i)));
         }
 
         return uniformBuffers;
@@ -324,22 +328,44 @@ private:
         return pool;
     }
 
-    std::vector<vk::raii::DescriptorSet> createDescriptorSets() const
+    std::vector<std::vector<vk::raii::DescriptorSet>> createDescriptorSets() const
     {
-        std::vector<vk::DescriptorSetLayout> layouts(
-            buildInfo.renderer.maxFramesInFlight, *_graphicsPipeline.descriptorSetLayouts[0]);
-        vk::DescriptorSetAllocateInfo allocInfo(*_descriptorPool, layouts);
+        const uint32_t maxFramesInFlight = buildInfo.renderer.maxFramesInFlight;
 
-        std::vector<vk::raii::DescriptorSet> descriptorSets =
-            _context.getDevice()->allocateDescriptorSets(allocInfo);
+        // extract non-raii handles from descriptor set layouts
+        std::vector<vk::DescriptorSetLayout> raw_descriptorSetLayouts;
+        raw_descriptorSetLayouts.reserve(_graphicsPipeline.descriptorSetLayouts.size());
 
-        for (const auto& [i, descriptorSet] : std::ranges::views::enumerate(descriptorSets))
-            _context.setDebugName(
-                vk::ObjectType::eDescriptorSet,
-                &**descriptorSet,
-                std::format("Descriptor Set {}", i));
+        for (const auto& descriptorSetLayout : _graphicsPipeline.descriptorSetLayouts)
+            raw_descriptorSetLayouts.push_back(*descriptorSetLayout);
 
-        return descriptorSets;
+        // create one copy of the raw layouts per frame
+        std::vector<std::vector<vk::DescriptorSetLayout>> all_layouts;
+        all_layouts.reserve(maxFramesInFlight);
+
+        for (const auto _ : std::ranges::views::iota(0U, maxFramesInFlight))
+            all_layouts.push_back(raw_descriptorSetLayouts);
+
+        // allocate descriptor sets
+        std::vector<std::vector<vk::raii::DescriptorSet>> all_descriptorSets;
+        all_descriptorSets.reserve(maxFramesInFlight);
+
+        for (const auto& [i, layouts] : std::ranges::views::enumerate(all_layouts))
+        {
+            vk::DescriptorSetAllocateInfo allocInfo(*_descriptorPool, layouts);
+
+            all_descriptorSets.emplace_back(
+                _context.getDevice()->allocateDescriptorSets(allocInfo));
+
+            for (const auto& [j, descriptorSet] :
+                 std::ranges::views::enumerate(all_descriptorSets.back()))
+                _context.setDebugName(
+                    vk::ObjectType::eDescriptorSet,
+                    &**descriptorSet,
+                    std::format("Descriptor Set {} (Frame {})", j, i));
+        }
+
+        return all_descriptorSets;
     }
 };
 
