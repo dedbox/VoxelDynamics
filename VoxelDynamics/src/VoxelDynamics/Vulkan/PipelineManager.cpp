@@ -265,11 +265,11 @@ std::vector<vk::raii::DescriptorSetLayout> PipelineManager::generateDescriptorSe
     std::map<uint32_t, std::map<uint32_t, vk::DescriptorSetLayoutBinding>> globalBindings;
     uint32_t maxSetNumber{};
 
-    for (const auto& [i, pair] :
-         std::ranges::views::enumerate(std::ranges::views::zip(shaderModuleConfigs, entryPoints)))
+    for (const auto& [i, config, entryPoint] : std::ranges::views::zip(
+             std::ranges::views::iota(0U, shaderModuleConfigs.size()),
+             shaderModuleConfigs,
+             entryPoints))
     {
-        const auto& [config, entryPoint] = pair;
-
         // combine descriptor sets
         const auto descriptorSets = std::span<SpvReflectDescriptorSet>(
             entryPoint->descriptor_sets, entryPoint->descriptor_set_count);
@@ -316,7 +316,7 @@ std::vector<vk::raii::DescriptorSetLayout> PipelineManager::generateDescriptorSe
 
     // create descriptor set layouts
     std::vector<vk::raii::DescriptorSetLayout> descriptorSetLayouts;
-    for (const auto setNumber : std::ranges::views::iota(0U, maxSetNumber))
+    for (const auto setNumber : std::ranges::views::iota(0U, maxSetNumber + 1))
     {
         // descriptor set IS defined in the shader source
         if (globalBindings.contains(setNumber))

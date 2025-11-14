@@ -61,6 +61,7 @@ public:
         , _uniformBuffers(createUniformBuffers())
         , _descriptorPool(createDescriptorPool())
         , _descriptorSets(createDescriptorSets())
+        , _raw_descriptorSets(extractRawDescriptorSets())
     {
     }
 
@@ -96,14 +97,9 @@ public:
                 descriptorSets[0], 0, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo0);
             device->updateDescriptorSets(descriptorWrite0, {});
 
-            vk::DescriptorBufferInfo bufferInfo1(***uniformBuffers[1], 0, 0);
-            vk::WriteDescriptorSet descriptorWrite1(
-                descriptorSets[1], 1, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo0);
-            device->updateDescriptorSets(descriptorWrite1, {});
-
             vk::DescriptorBufferInfo bufferInfo2(***uniformBuffers[2], 0, sizeof(ObjectBufferData));
             vk::WriteDescriptorSet descriptorWrite2(
-                descriptorSets[2], 2, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo1);
+                descriptorSets[2], 0, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo2);
             device->updateDescriptorSets(descriptorWrite2, {});
         }
 
@@ -150,7 +146,7 @@ public:
     {
         const auto currentFrame    = _renderer.getSwapChain().currentFrame;
         const auto& uniformBuffers = _uniformBuffers[currentFrame];
-        const auto& descriptorSets = _descriptorSets[currentFrame];
+        const auto& descriptorSets = _raw_descriptorSets[currentFrame];
 
         // rotate 90 degrees per second around z-axis
         _ubo_object.model = glm::rotate(
@@ -180,7 +176,7 @@ public:
                     vk::PipelineBindPoint::eGraphics,  // pipeline bind point
                     *_graphicsPipeline.pipelineLayout, // pipeline layout
                     0,                                 // first set
-                    *descriptorSets[currentFrame],     // descriptor sets
+                    descriptorSets,                    // descriptor sets
                     nullptr);                          // dynamic offsets
 
                 // issue indexed draw command
@@ -212,6 +208,7 @@ private:
 
     vk::raii::DescriptorPool _descriptorPool;
     std::vector<std::vector<vk::raii::DescriptorSet>> _descriptorSets;
+    std::vector<std::vector<vk::DescriptorSet>> _raw_descriptorSets;
 
     const Vulkan::Pipeline& createGraphicsPipeline()
     {
@@ -296,8 +293,8 @@ private:
     std::vector<std::vector<std::optional<Vulkan::UniformBuffer>>> createUniformBuffers() const
     {
         // create one set of uniform buffers per frame
-        std::vector<std::vector<std::optional<Vulkan::UniformBuffer>>> uniformBuffers;
-        uniformBuffers.reserve(buildInfo.renderer.maxFramesInFlight);
+        std::vector<std::vector<std::optional<Vulkan::UniformBuffer>>> uniformBuffers(
+            buildInfo.renderer.maxFramesInFlight);
 
         for (const auto i : std::ranges::views::iota(0U, buildInfo.renderer.maxFramesInFlight))
         {
@@ -314,11 +311,11 @@ private:
     vk::raii::DescriptorPool createDescriptorPool() const
     {
         vk::DescriptorPoolSize poolSize(
-            vk::DescriptorType::eUniformBuffer, 2 * buildInfo.renderer.maxFramesInFlight);
+            vk::DescriptorType::eUniformBuffer, 3 * buildInfo.renderer.maxFramesInFlight);
 
         vk::DescriptorPoolCreateInfo poolInfo(
             vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-            buildInfo.renderer.maxFramesInFlight,
+            3 * buildInfo.renderer.maxFramesInFlight,
             poolSize);
 
         vk::raii::DescriptorPool pool(*_context.getDevice(), poolInfo);
@@ -333,11 +330,10 @@ private:
         const uint32_t maxFramesInFlight = buildInfo.renderer.maxFramesInFlight;
 
         // extract non-raii handles from descriptor set layouts
-        std::vector<vk::DescriptorSetLayout> raw_descriptorSetLayouts;
-        raw_descriptorSetLayouts.reserve(_graphicsPipeline.descriptorSetLayouts.size());
-
-        for (const auto& descriptorSetLayout : _graphicsPipeline.descriptorSetLayouts)
-            raw_descriptorSetLayouts.push_back(*descriptorSetLayout);
+        const auto raw_descriptorSetLayouts =
+            _graphicsPipeline.descriptorSetLayouts |
+            std::ranges::views::transform([](const auto& layout) { return *layout; }) |
+            std::ranges::to<std::vector<vk::DescriptorSetLayout>>();
 
         // create one copy of the raw layouts per frame
         std::vector<std::vector<vk::DescriptorSetLayout>> all_layouts;
@@ -366,6 +362,18 @@ private:
         }
 
         return all_descriptorSets;
+    }
+
+    std::vector<std::vector<vk::DescriptorSet>> extractRawDescriptorSets() const
+    {
+        return _descriptorSets //
+               | std::views::transform([](const auto& descriptorSets) {
+                     return descriptorSets //
+                            | std::views::transform(
+                                  [](const auto& descriptorSet) { return *descriptorSet; }) //
+                            | std::ranges::to<std::vector>();
+                 }) //
+               | std::ranges::to<std::vector>();
     }
 };
 
