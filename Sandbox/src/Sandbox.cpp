@@ -250,18 +250,12 @@ private:
     {
         const uint32_t maxFramesInFlight = buildInfo.renderer.maxFramesInFlight;
 
-        // extract non-raii handles from descriptor set layouts
-        const auto raw_descriptorSetLayouts =
-            _graphicsPipeline.descriptorSetLayouts |
-            std::ranges::views::transform([](const auto& layout) { return *layout; }) |
-            std::ranges::to<std::vector<vk::DescriptorSetLayout>>();
-
         // create one copy of the raw layouts per frame
         std::vector<std::vector<vk::DescriptorSetLayout>> all_layouts;
         all_layouts.reserve(maxFramesInFlight);
 
         for (const auto _ : std::ranges::views::iota(0U, maxFramesInFlight))
-            all_layouts.push_back(raw_descriptorSetLayouts);
+            all_layouts.push_back(_graphicsPipeline.raw_descriptorSetLayouts);
 
         // allocate descriptor sets
         std::vector<std::vector<vk::raii::DescriptorSet>> all_descriptorSets;

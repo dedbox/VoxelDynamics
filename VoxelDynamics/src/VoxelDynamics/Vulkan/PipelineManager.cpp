@@ -74,7 +74,7 @@ const Pipeline& PipelineManager::getGraphicsPipeline(
     }
 
     // create layouts
-    auto [pipelineLayout, descriptorSetLayouts] =
+    auto [pipelineLayout, descriptorSetLayouts, raw_descriptorSetLayouts] =
         generatePipelineLayout(config.modules, modules, entryPoints, config.debugName);
 
     // configure dynamic states
@@ -114,7 +114,10 @@ const Pipeline& PipelineManager::getGraphicsPipeline(
     _context->setDebugName(vk::ObjectType::ePipeline, &**new_pipeline, config.debugName);
 
     Pipeline pipeline(
-        std::move(new_pipeline), std::move(pipelineLayout), std::move(descriptorSetLayouts));
+        std::move(new_pipeline),
+        std::move(pipelineLayout),
+        std::move(descriptorSetLayouts),
+        std::move(raw_descriptorSetLayouts));
 
     _pipelineCacheMap.insert({{config, vertexInputState}, std::move(pipeline)});
 
@@ -229,24 +232,21 @@ PipelineManager::generateVertexInputDescriptions(
     return std::make_pair(bindingDesc, attribDescs);
 }
 
-std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> PipelineManager::
-    generatePipelineLayout(
-        const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
-        const std::vector<SpvReflectShaderModule>& modules,
-        const std::vector<const SpvReflectEntryPoint*>& entryPoints,
-        const std::string& debugName) const
+std::tuple<
+    vk::raii::PipelineLayout,
+    std::vector<vk::raii::DescriptorSetLayout>,
+    std::vector<vk::DescriptorSetLayout>>
+PipelineManager::generatePipelineLayout(
+    const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
+    const std::vector<SpvReflectShaderModule>& modules,
+    const std::vector<const SpvReflectEntryPoint*>& entryPoints,
+    const std::string& debugName) const
 {
-    std::vector<vk::raii::DescriptorSetLayout> descriptorSetLayouts =
+    auto [descriptorSetLayouts, raw_descriptorSetLayouts] =
         generateDescriptorSetLayouts(shaderModuleConfigs, entryPoints, debugName);
 
     std::vector<vk::PushConstantRange> pushConstantRanges =
         generatePushConstantRanges(shaderModuleConfigs, modules, entryPoints, debugName);
-
-    // create pipeline layout
-    const auto raw_descriptorSetLayouts =
-        descriptorSetLayouts |
-        std::ranges::views::transform([](const auto& layout) { return *layout; }) |
-        std::ranges::to<std::vector<vk::DescriptorSetLayout>>();
 
     vk::PipelineLayoutCreateInfo createInfo({}, raw_descriptorSetLayouts, pushConstantRanges);
     vk::raii::PipelineLayout pipelineLayout(*_context->getDevice(), createInfo);
@@ -254,10 +254,14 @@ std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>> 
     _context->setDebugName(
         vk::ObjectType::ePipelineLayout, &**pipelineLayout, std::format("{} Layout", debugName));
 
-    return std::make_pair(std::move(pipelineLayout), std::move(descriptorSetLayouts));
+    return std::make_tuple(
+        std::move(pipelineLayout),
+        std::move(descriptorSetLayouts),
+        std::move(raw_descriptorSetLayouts));
 }
 
-std::vector<vk::raii::DescriptorSetLayout> PipelineManager::generateDescriptorSetLayouts(
+std::pair<std::vector<vk::raii::DescriptorSetLayout>, std::vector<vk::DescriptorSetLayout>>
+PipelineManager::generateDescriptorSetLayouts(
     const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
     const std::vector<const SpvReflectEntryPoint*>& entryPoints,
     const std::string& debugName) const
@@ -353,7 +357,13 @@ std::vector<vk::raii::DescriptorSetLayout> PipelineManager::generateDescriptorSe
         }
     }
 
-    return descriptorSetLayouts;
+    // create pipeline layout
+    auto raw_descriptorSetLayouts =
+        descriptorSetLayouts |
+        std::ranges::views::transform([](const auto& layout) { return *layout; }) |
+        std::ranges::to<std::vector<vk::DescriptorSetLayout>>();
+
+    return std::make_pair(std::move(descriptorSetLayouts), std::move(raw_descriptorSetLayouts));
 }
 
 std::vector<vk::PushConstantRange> PipelineManager::generatePushConstantRanges(

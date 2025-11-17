@@ -14,14 +14,17 @@ struct Pipeline
     vk::raii::Pipeline pipeline;
     vk::raii::PipelineLayout pipelineLayout;
     std::vector<vk::raii::DescriptorSetLayout> descriptorSetLayouts;
+    std::vector<vk::DescriptorSetLayout> raw_descriptorSetLayouts;
 
     Pipeline(
         vk::raii::Pipeline pipeline_,
         vk::raii::PipelineLayout pipelineLayout_,
-        std::vector<vk::raii::DescriptorSetLayout> descriptorSetLayouts_)
+        std::vector<vk::raii::DescriptorSetLayout> descriptorSetLayouts_,
+        std::vector<vk::DescriptorSetLayout> raw_descriptorSetLayouts_)
         : pipeline(std::move(pipeline_))
         , pipelineLayout(std::move(pipelineLayout_))
         , descriptorSetLayouts(std::move(descriptorSetLayouts_))
+        , raw_descriptorSetLayouts(std::move(raw_descriptorSetLayouts_))
     {
     }
 
@@ -68,14 +71,18 @@ private:
         const std::function<uint32_t(uint32_t)>& getLocationOffset,
         const std::string& debugName) const;
 
-    std::pair<vk::raii::PipelineLayout, std::vector<vk::raii::DescriptorSetLayout>>
+    std::tuple<
+        vk::raii::PipelineLayout,
+        std::vector<vk::raii::DescriptorSetLayout>,
+        std::vector<vk::DescriptorSetLayout>>
     generatePipelineLayout(
         const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
         const std::vector<SpvReflectShaderModule>& modules,
         const std::vector<const SpvReflectEntryPoint*>& entryPoints,
         const std::string& debugName) const;
 
-    std::vector<vk::raii::DescriptorSetLayout> generateDescriptorSetLayouts(
+    std::pair<std::vector<vk::raii::DescriptorSetLayout>, std::vector<vk::DescriptorSetLayout>>
+    generateDescriptorSetLayouts(
         const std::vector<ShaderModuleConfig>& shaderModuleConfigs,
         const std::vector<const SpvReflectEntryPoint*>& entryPoints,
         const std::string& debugName) const;
