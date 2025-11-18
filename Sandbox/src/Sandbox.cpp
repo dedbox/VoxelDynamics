@@ -60,7 +60,8 @@ public:
         , _indexBuffer(
               _renderer.transferIndexData(_indices.data(), _indices.size() * sizeof(uint16_t)))
         , _uniformBuffers(createUniformBuffers())
-        , _descriptorPool(createDescriptorPool())
+        , _descriptorSetManager(
+              Vulkan::DescriptorSetManager(&_context, 3 * buildInfo.renderer.maxFramesInFlight))
         , _descriptorSets(createDescriptorSets())
         , _raw_descriptorSets(extractRawDescriptorSets())
     {
@@ -207,7 +208,8 @@ private:
 
     std::vector<std::vector<std::optional<Vulkan::UniformBuffer>>> _uniformBuffers;
 
-    vk::raii::DescriptorPool _descriptorPool;
+    Vulkan::DescriptorSetManager _descriptorSetManager;
+
     std::vector<std::vector<vk::raii::DescriptorSet>> _descriptorSets;
     std::vector<std::vector<vk::DescriptorSet>> _raw_descriptorSets;
 
@@ -229,23 +231,6 @@ private:
         return uniformBuffers;
     }
 
-    vk::raii::DescriptorPool createDescriptorPool() const
-    {
-        vk::DescriptorPoolSize poolSize(
-            vk::DescriptorType::eUniformBuffer, 3 * buildInfo.renderer.maxFramesInFlight);
-
-        vk::DescriptorPoolCreateInfo poolInfo(
-            vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-            3 * buildInfo.renderer.maxFramesInFlight,
-            poolSize);
-
-        vk::raii::DescriptorPool pool(*_context.getDevice(), poolInfo);
-
-        _context.setDebugName(vk::ObjectType::eDescriptorPool, &**pool, "Descriptor Pool");
-
-        return pool;
-    }
-
     std::vector<std::vector<vk::raii::DescriptorSet>> createDescriptorSets() const
     {
         const uint32_t maxFramesInFlight = buildInfo.renderer.maxFramesInFlight;
@@ -263,10 +248,7 @@ private:
 
         for (const auto& [i, layouts] : std::ranges::views::enumerate(all_layouts))
         {
-            vk::DescriptorSetAllocateInfo allocInfo(*_descriptorPool, layouts);
-
-            all_descriptorSets.emplace_back(
-                _context.getDevice()->allocateDescriptorSets(allocInfo));
+            all_descriptorSets.emplace_back(_descriptorSetManager.allocateDescriptorSets(layouts));
 
             for (const auto& [j, descriptorSet] :
                  std::ranges::views::enumerate(all_descriptorSets.back()))

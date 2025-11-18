@@ -9,6 +9,7 @@
 #include <VoxelDynamics/Core/Window.hpp>
 
 #include <VoxelDynamics/Vulkan/Context.hpp>
+#include <VoxelDynamics/Vulkan/DescriptorSetManager.hpp>
 #include <VoxelDynamics/Vulkan/Device.hpp>
 #include <VoxelDynamics/Vulkan/PhysicalDevice.hpp>
 #include <VoxelDynamics/Vulkan/PipelineConfig.hpp>

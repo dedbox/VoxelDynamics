@@ -10,6 +10,7 @@ add_library(
   src/VoxelDynamics/Core/Window.cpp
   src/VoxelDynamics/Vulkan/CommandBufferManager.cpp
   src/VoxelDynamics/Vulkan/Context.cpp
+  src/VoxelDynamics/Vulkan/DescriptorSetManager.cpp
   src/VoxelDynamics/Vulkan/Device.cpp
   src/VoxelDynamics/Vulkan/Instance.cpp
   src/VoxelDynamics/Vulkan/PhysicalDevice.cpp
