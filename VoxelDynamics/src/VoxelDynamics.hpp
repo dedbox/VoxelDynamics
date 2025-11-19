@@ -17,3 +17,4 @@
 #include <VoxelDynamics/Vulkan/RenderQueue.hpp>
 #include <VoxelDynamics/Vulkan/Renderer.hpp>
 #include <VoxelDynamics/Vulkan/UniformBuffer.hpp>
+#include <VoxelDynamics/Vulkan/UniformData.hpp>

@@ -16,6 +16,7 @@ add_library(
   src/VoxelDynamics/Vulkan/PhysicalDevice.cpp
   src/VoxelDynamics/Vulkan/PipelineManager.cpp
   src/VoxelDynamics/Vulkan/Renderer.cpp
+  src/VoxelDynamics/Vulkan/UniformData.cpp
   vendor/spirv-reflect/spirv_reflect.c)
 
 target_link_libraries(VoxelDynamics PUBLIC Vulkan::Vulkan SDL3::SDL3 EnTT::EnTT

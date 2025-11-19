@@ -59,7 +59,7 @@ public:
               _renderer.transferVertexData(_vertices.data(), _vertices.size() * sizeof(Vertex)))
         , _indexBuffer(
               _renderer.transferIndexData(_indices.data(), _indices.size() * sizeof(uint16_t)))
-        , _uniformBuffers(createUniformBuffers())
+        , _uniformDatas(createUniformDatas())
         , _descriptorSetManager(
               Vulkan::DescriptorSetManager(&_context, 3 * buildInfo.renderer.maxFramesInFlight))
         , _descriptorSets(createDescriptorSets())
@@ -87,19 +87,21 @@ public:
         _ubo_camera.projection[1][1] *= -1;
 
         // update camera uniform buffer
-        for (const auto& buffers : _uniformBuffers)
-            buffers[0]->update(&_ubo_camera);
+        for (const auto& datas : _uniformDatas)
+            datas[0].update(&_ubo_camera);
 
         // configure descriptor set updates
         for (const auto& [uniformBuffers, descriptorSets] :
-             std::ranges::views::zip(_uniformBuffers, _descriptorSets))
+             std::ranges::views::zip(_uniformDatas, _descriptorSets))
         {
-            vk::DescriptorBufferInfo bufferInfo0(***uniformBuffers[0], 0, sizeof(CameraBufferData));
+            vk::DescriptorBufferInfo bufferInfo0(
+                ****uniformBuffers[0], 0, sizeof(CameraBufferData));
             vk::WriteDescriptorSet descriptorWrite0(
                 descriptorSets[0], 0, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo0);
             device->updateDescriptorSets(descriptorWrite0, {});
 
-            vk::DescriptorBufferInfo bufferInfo2(***uniformBuffers[2], 0, sizeof(ObjectBufferData));
+            vk::DescriptorBufferInfo bufferInfo2(
+                ****uniformBuffers[2], 0, sizeof(ObjectBufferData));
             vk::WriteDescriptorSet descriptorWrite2(
                 descriptorSets[2], 0, 0, vk::DescriptorType::eUniformBuffer, {}, bufferInfo2);
             device->updateDescriptorSets(descriptorWrite2, {});
@@ -147,7 +149,7 @@ public:
     void onUpdate(double /*deltaTime*/) override
     {
         const auto currentFrame    = _renderer.getSwapChain().currentFrame;
-        const auto& uniformBuffers = _uniformBuffers[currentFrame];
+        const auto& uniformDatas   = _uniformDatas[currentFrame];
         const auto& descriptorSets = _raw_descriptorSets[currentFrame];
 
         // rotate 90 degrees per second around z-axis
@@ -157,7 +159,7 @@ public:
             glm::vec3(0.0F, 0.0F, 1.0F));
 
         // update object uniform buffer
-        uniformBuffers[2]->update(&_ubo_object);
+        uniformDatas[2].update(&_ubo_object);
 
         _renderer.drawFrame(
             _window, *_graphicsPipeline, [&](const vk::raii::CommandBuffer& cmdBuffer) {
@@ -206,29 +208,31 @@ private:
     Vulkan::Buffer _vertexBuffer;
     Vulkan::Buffer _indexBuffer;
 
-    std::vector<std::vector<std::optional<Vulkan::UniformBuffer>>> _uniformBuffers;
+    std::vector<std::vector<Vulkan::UniformData>> _uniformDatas;
 
     Vulkan::DescriptorSetManager _descriptorSetManager;
 
     std::vector<std::vector<vk::raii::DescriptorSet>> _descriptorSets;
     std::vector<std::vector<vk::DescriptorSet>> _raw_descriptorSets;
 
-    std::vector<std::vector<std::optional<Vulkan::UniformBuffer>>> createUniformBuffers() const
+    std::vector<std::vector<Vulkan::UniformData>> createUniformDatas() const
     {
-        // create one set of uniform buffers per frame
-        std::vector<std::vector<std::optional<Vulkan::UniformBuffer>>> uniformBuffers(
-            buildInfo.renderer.maxFramesInFlight);
+        const uint32_t maxFramesInFlight = buildInfo.renderer.maxFramesInFlight;
 
-        for (const auto i : std::ranges::views::iota(0U, buildInfo.renderer.maxFramesInFlight))
+        // create one set of uniform buffers per frame
+        std::vector<std::vector<Vulkan::UniformData>> uniformDatas(maxFramesInFlight);
+
+        for (const auto i : std::ranges::views::iota(0U, maxFramesInFlight))
         {
-            uniformBuffers[i].emplace_back(_context.createUniformBuffer(
-                sizeof(CameraBufferData), std::format("Camera Uniform Buffer (Frame {})", i)));
-            uniformBuffers[i].emplace_back(std::nullopt);
-            uniformBuffers[i].emplace_back(_context.createUniformBuffer(
-                sizeof(ObjectBufferData), std::format("Object Uniform Buffer (Frame {})", i)));
+            uniformDatas[i].emplace_back(
+                &_context, sizeof(CameraBufferData), std::format("Camera (Frame {})", i));
+            uniformDatas[i].emplace_back(
+                &_context, std::nullopt, std::format("Unused (Frame {})", i));
+            uniformDatas[i].emplace_back(
+                &_context, sizeof(ObjectBufferData), std::format("Object (Frame {})", i));
         }
 
-        return uniformBuffers;
+        return uniformDatas;
     }
 
     std::vector<std::vector<vk::raii::DescriptorSet>> createDescriptorSets() const
